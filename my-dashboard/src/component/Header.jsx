@@ -1,7 +1,7 @@
 import { motion } from 'framer-motion';
 import SearchBox from './SearchBox';
 import ProfileInfo from './ProfileInfo';
-import { useUser } from '../context/UserContext'; // ✅ import user context
+import { useUser } from '../context/UserContext';
 
 const Header = () => {
   const { user } = useUser(); // ✅ get current user

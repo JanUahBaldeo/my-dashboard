@@ -2,9 +2,9 @@
 
 import React from 'react';
 import Header from '../component/Header';
-import AdminDashboard from '../component/admin/AdminDashboard';
+import AdminDashboard from './component/admin/AdminDashboard';
 import { useUser } from '../context/UserContext';
-import { motion } from 'framer-motion'; // ✅ for animated section title
+import { motion } from 'framer-motion';
 
 const AdminDashboardPage = () => {
   const { user } = useUser();

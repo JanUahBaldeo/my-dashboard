@@ -1,12 +1,12 @@
-import { useState } from 'react';
+import { useState } from 'react'; 
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '../lib/supabaseClient'; // Make sure this is configured
+import { supabase } from '../lib/supabaseClient';
 import { useUser } from '../context/UserContext';
 
 const RegisterPage = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [role, setRole] = useState('User'); // 👈 added role state
+  const [role, setRole] = useState('User'); // ✅ Include new role
   const { setUser } = useUser();
   const navigate = useNavigate();
   const [error, setError] = useState('');
@@ -31,12 +31,19 @@ const RegisterPage = () => {
         email: data.user.email,
         name: 'New User',
         avatar: 'https://i.ibb.co/rK44TsnC/logo.png',
-        tier: role, // 👈 apply selected role here
+        tier: role,
       };
 
       setUser(userData);
       localStorage.setItem('user', JSON.stringify(userData));
-      navigate(`/user-dashboard/${userId}`);
+
+      if (role === 'Admin') {
+        navigate('/admin');
+      } else if (role === 'Production Partner') {
+        navigate(`/partner-dashboard/${userId}`);
+      } else {
+        navigate(`/user-dashboard/${userId}`);
+      }
     }
   };
 
@@ -82,7 +89,7 @@ const RegisterPage = () => {
           required
         />
 
-        {/* ✅ Role Dropdown */}
+        {/* ✅ Updated Role Dropdown */}
         <label htmlFor="reg-role" className="block text-sm text-gray-700 dark:text-gray-200">
           Role
         </label>
@@ -94,6 +101,7 @@ const RegisterPage = () => {
         >
           <option value="User">User</option>
           <option value="Admin">Admin</option>
+          <option value="Production Partner">Production Partner</option> {/* ✅ New Role Added */}
         </select>
 
         <button

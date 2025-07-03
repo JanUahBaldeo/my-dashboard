@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 import { supabase } from '../lib/supabaseClient';
 
-export const UserContext = createContext();
+export const UserContext = createContext(null); // ✅ Named export only
 
 export const UserProvider = ({ children }) => {
   const [user, setUser] = useState(null);
@@ -14,7 +14,8 @@ export const UserProvider = ({ children }) => {
       .single();
 
     if (error || !data) {
-      console.warn('No metadata from DB, falling back to session info.');
+      console.warn('No user record found, falling back to session user');
+
       const session = fallbackSessionUser;
 
       setUser({
@@ -23,18 +24,20 @@ export const UserProvider = ({ children }) => {
         name: session.user_metadata?.name || 'User',
         avatar: session.user_metadata?.avatar_url || 'https://i.ibb.co/rK44TsnC/logo.png',
         tier: 'Standard',
-        role: 'user', // default fallback role
+        role: 'User', // Default role; routing handles 'Partner' logic elsewhere
       });
+
       return;
     }
 
+    // ✅ Prefer data from Supabase users table
     setUser({
       id: data.id,
       email: data.email,
       name: data.full_name || 'User',
       avatar: data.avatar_url || 'https://i.ibb.co/rK44TsnC/logo.png',
       tier: data.tier || 'Standard',
-      role: data.role || 'user', // <- 🔐 Add role from DB
+      role: data.role || 'User', // Could be 'Admin', 'Partnership', etc.
     });
   };
 
@@ -76,4 +79,4 @@ export const UserProvider = ({ children }) => {
   );
 };
 
-export const useUser = () => useContext(UserContext);
+export const useUser = () => useContext(UserContext); // ✅ Hook for consuming context

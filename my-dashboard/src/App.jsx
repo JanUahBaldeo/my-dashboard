@@ -9,7 +9,8 @@ import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import UserDashboardPage from './pages/DashboardPage';
 import AdminDashboard from './component/admin/AdminDashboard';
-import UnauthorizedPage from './pages/UnauthorizedPage'; // ✅ NEW
+import PartnerDashboardPage from './pages/PartnerDashboardPage';
+import UnauthorizedPage from './pages/UnauthorizedPage';
 
 import './index.css';
 
@@ -62,11 +63,25 @@ const App = () => {
 
         {/* 🔐 Admin Route */}
         <Route
-          path="/admin"
+          path="/admin-dashboard/:userId"
           element={
             user?.tier === 'Admin' ? (
               <ProtectedRoute>
                 <AdminDashboard />
+              </ProtectedRoute>
+            ) : (
+              <Navigate to="/unauthorized" replace />
+            )
+          }
+        />
+
+        {/* 🔐 Production Partner Route */}
+        <Route
+          path="/partner-dashboard/:userId"
+          element={
+            user?.tier === 'Production Partner' ? (
+              <ProtectedRoute>
+                <PartnerDashboardPage />
               </ProtectedRoute>
             ) : (
               <Navigate to="/unauthorized" replace />

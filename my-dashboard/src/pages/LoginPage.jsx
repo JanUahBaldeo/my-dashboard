@@ -5,7 +5,7 @@ import { useUser } from '../context/UserContext';
 const LoginPage = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [role, setRole] = useState('User'); // 👈 Added role selector
+  const [role, setRole] = useState('User');
   const { setUser } = useUser();
   const navigate = useNavigate();
 
@@ -17,13 +17,20 @@ const LoginPage = () => {
       email,
       name: 'Olivia Wilson',
       avatar: 'https://i.ibb.co/rK44TsnC/logo.png',
-      tier: role, // 👈 Inject role into context
+      tier: role,
     };
 
     setUser(loggedInUser);
     localStorage.setItem('user', JSON.stringify(loggedInUser));
 
-    navigate(role === 'Admin' ? '/admin' : `/user-dashboard/${loggedInUser.id}`);
+    // ✅ Role-based navigation
+    if (role === 'Admin') {
+      navigate(`/admin-dashboard/${loggedInUser.id}`);
+    } else if (role === 'Production Partner') {
+      navigate(`/partner-dashboard/${loggedInUser.id}`);
+    } else {
+      navigate(`/user-dashboard/${loggedInUser.id}`);
+    }
   };
 
   return (
@@ -64,7 +71,6 @@ const LoginPage = () => {
           required
         />
 
-        {/* ✅ Role selector */}
         <label htmlFor="role" className="block text-sm text-gray-700 dark:text-gray-200">
           Role
         </label>
@@ -76,6 +82,7 @@ const LoginPage = () => {
         >
           <option value="User">User</option>
           <option value="Admin">Admin</option>
+          <option value="Production Partner">Production Partner</option>
         </select>
 
         <button
