@@ -1,26 +1,35 @@
-// main.jsx
+// ========================================
+// 🎯 MAIN ENTRY POINT WITH ALIASED IMPORTS
+// ========================================
+
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
+
+// Context providers using aliases
+import { TaskProvider } from '@context/TaskContext';
+import { PipelineProvider } from '@context/PipelineContext';
+import { RoleProvider } from '@context/RoleContext';
+import { UserProvider } from '@context/UserContext';
+
+// App component
 import App from './App';
-import './index.css';
 
-import { UserProvider } from './context/UserContext';   // ✅ Vite-safe context
-import { TaskProvider } from './context/TaskContext';
-// import { ThemeProvider } from './hooks/useTheme';    // Optional if using ThemeContext
+// Global styles
+import '@styles/index.css';
 
-const Root = () => (
+ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <BrowserRouter>
       <UserProvider>
+      <RoleProvider>
         <TaskProvider>
-          {/* <ThemeProvider> */}
+          <PipelineProvider>
             <App />
-          {/* </ThemeProvider> */}
+          </PipelineProvider>
         </TaskProvider>
+      </RoleProvider>
       </UserProvider>
     </BrowserRouter>
-  </React.StrictMode>
+  </React.StrictMode>,
 );
-
-ReactDOM.createRoot(document.getElementById('root')).render(<Root />);

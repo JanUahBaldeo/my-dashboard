@@ -1,82 +1,79 @@
 import { createContext, useContext, useState, useEffect } from 'react';
-import { supabase } from '../lib/supabaseClient';
 
-export const UserContext = createContext(null); // ✅ Named export only
+const UserContext = createContext();
+
+export const useUser = () => {
+  const context = useContext(UserContext);
+  if (!context) {
+    throw new Error('useUser must be used within a UserProvider');
+  }
+  return context;
+};
 
 export const UserProvider = ({ children }) => {
   const [user, setUser] = useState(null);
-
-  const fetchUserDetails = async (userId, fallbackSessionUser = null) => {
-    const { data, error } = await supabase
-      .from('users')
-      .select('*')
-      .eq('id', userId)
-      .single();
-
-    if (error || !data) {
-      console.warn('No user record found, falling back to session user');
-
-      const session = fallbackSessionUser;
-
-      setUser({
-        id: session.id,
-        email: session.email,
-        name: session.user_metadata?.name || 'User',
-        avatar: session.user_metadata?.avatar_url || 'https://i.ibb.co/rK44TsnC/logo.png',
-        tier: 'Standard',
-        role: 'User', // Default role; routing handles 'Partner' logic elsewhere
-      });
-
-      return;
-    }
-
-    // ✅ Prefer data from Supabase users table
-    setUser({
-      id: data.id,
-      email: data.email,
-      name: data.full_name || 'User',
-      avatar: data.avatar_url || 'https://i.ibb.co/rK44TsnC/logo.png',
-      tier: data.tier || 'Standard',
-      role: data.role || 'User', // Could be 'Admin', 'Partnership', etc.
-    });
-  };
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const restoreSession = async () => {
-      const { data } = await supabase.auth.getSession();
-      const sessionUser = data?.session?.user;
-
-      if (sessionUser) {
-        fetchUserDetails(sessionUser.id, sessionUser);
-      }
+    // Simulate user authentication
+    const mockUser = {
+      id: 'user-123',
+      name: 'John Doe',
+      email: 'john.doe@example.com',
+      role: 'Sales Representative',
+      department: 'Sales',
+      avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&h=150&fit=crop&crop=face',
+      permissions: ['view_tasks', 'create_tasks', 'edit_tasks', 'delete_tasks'],
+      preferences: {
+        theme: 'light',
+        notifications: true,
+        taskView: 'list',
+      },
     };
 
-    restoreSession();
-
-    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
-      const sessionUser = session?.user;
-      if (sessionUser) {
-        fetchUserDetails(sessionUser.id, sessionUser);
-      } else {
-        setUser(null);
-      }
-    });
-
-    return () => {
-      authListener?.subscription?.unsubscribe?.();
-    };
+    // Store user in localStorage for persistence
+    localStorage.setItem('currentUser', JSON.stringify(mockUser));
+    setUser(mockUser);
+    setLoading(false);
   }, []);
 
-  const logout = async () => {
-    await supabase.auth.signOut();
+  const login = (userData) => {
+    setUser(userData);
+    localStorage.setItem('currentUser', JSON.stringify(userData));
+  };
+
+  const logout = () => {
     setUser(null);
+    localStorage.removeItem('currentUser');
+  };
+
+  const updateUser = (updates) => {
+    const updatedUser = { ...user, ...updates };
+    setUser(updatedUser);
+    localStorage.setItem('currentUser', JSON.stringify(updatedUser));
+  };
+
+  const updatePreferences = (preferences) => {
+    const updatedUser = {
+      ...user,
+      preferences: { ...user.preferences, ...preferences },
+    };
+    setUser(updatedUser);
+    localStorage.setItem('currentUser', JSON.stringify(updatedUser));
+  };
+
+  const value = {
+    user,
+    loading,
+    login,
+    logout,
+    updateUser,
+    updatePreferences,
   };
 
   return (
-    <UserContext.Provider value={{ user, setUser, logout }}>
+    <UserContext.Provider value={value}>
       {children}
     </UserContext.Provider>
   );
 };
-
-export const useUser = () => useContext(UserContext); // ✅ Hook for consuming context

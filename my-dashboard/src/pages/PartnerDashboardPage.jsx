@@ -1,10 +1,22 @@
+// ========================================
+// 🎯 PARTNER DASHBOARD PAGE WITH ALIASED IMPORTS
+// ========================================
+
 import React from 'react';
-import Header from '../component/Header';
-import PartnerLeadsTable from '../component/partnership/PartnerLeadsTable';
-import LeadConversionFunnel from '../component/partnership/LeadConversionFunnel';
-import PartnerDashboardInsights from '../component/partnership/PartnerDashboardInsights';
-import PartnerOverviewTable from '../component/partnership/PartnerOverviewTable';
-import CTRAnalyticsChart from '../component/partnership/CTRAnalyticsChart';
+import { Header } from '@components';
+import {
+  PartnerLeadsTable,
+  PartnerOverviewTable,
+  CampaignTrackerTable,
+  CTRAnalyticsChart,
+  LeadConversionFunnel,
+  IntegrationSummary,
+  PartnerRecommendations,
+  PartnerDashboardInsights,
+  TaskManagement,
+  CallActivity,
+  RecentCalls,
+} from '@components';
 
 const PartnerDashboardPage = () => {
   return (
@@ -14,7 +26,7 @@ const PartnerDashboardPage = () => {
 
       {/* ✅ Main Content */}
       <main className="w-full px-6 py-10 space-y-10">
-      
+
         {/* ✅ Section: Lead Generation */}
         <section className="w-full bg-slate-50 dark:bg-slate-800 rounded-xl shadow-md p-6 border border-slate-200 dark:border-slate-700">
           <PartnerLeadsTable />
@@ -25,9 +37,24 @@ const PartnerDashboardPage = () => {
           <LeadConversionFunnel />
         </section>
 
+        {/* ✅ Section: Task Management */}
+        <section className="w-full bg-white dark:bg-slate-800 rounded-xl shadow-md p-6 border border-slate-200 dark:border-slate-700">
+          <TaskManagement />
+        </section>
+
         {/* ✅ Section: Campaigns, Tasks, Integration Summary */}
         <section className="w-full rounded-xl shadow-md border border-slate-200 dark:border-slate-700 p-0">
           <PartnerDashboardInsights />
+        </section>
+
+        {/* ✅ Section: Call Activity */}
+        <section className="w-full bg-white dark:bg-slate-800 rounded-xl shadow-md p-6 border border-slate-200 dark:border-slate-700">
+          <CallActivity />
+        </section>
+
+        {/* ✅ Section: Recent Calls */}
+        <section className="w-full bg-white dark:bg-slate-800 rounded-xl shadow-md p-6 border border-slate-200 dark:border-slate-700">
+          <RecentCalls />
         </section>
 
         {/* ✅ Section: Overview Metrics */}
