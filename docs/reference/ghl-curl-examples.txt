@@ -1,0 +1,75 @@
+# ========================================
+# 🎯 CORRECTED GHL API cURL EXAMPLES
+# ========================================
+
+# 1. CREATE TASK (POST) - Corrected Syntax
+curl -X POST "https://services.leadconnectorhq.com/contacts/YOUR_CONTACT_ID/tasks" \
+  -H "Accept: application/json" \
+  -H "Authorization: Bearer pit-1dd731f9-e51f-40f7-bf4e-9e8cd31ed75f" \
+  -H "Content-Type: application/json" \
+  -H "Version: 2021-07-28" \
+  --data '{
+    "title": "First Task",
+    "body": "lorem ipsum",
+    "dueDate": "2025-01-15T11:00:00Z",
+    "completed": false
+  }'
+
+# 2. GET TASKS (GET)
+curl -X GET "https://services.leadconnectorhq.com/locations/b7vHWUGVUNQGoIlAXabY/tasks/search" \
+  -H "Accept: application/json" \
+  -H "Authorization: Bearer pit-1dd731f9-e51f-40f7-bf4e-9e8cd31ed75f" \
+  -H "Version: 2021-07-28" \
+  --data '{
+    "completed": false
+  }'
+
+# 3. UPDATE TASK (PUT)
+curl -X PUT "https://services.leadconnectorhq.com/locations/b7vHWUGVUNQGoIlAXabY/tasks/YOUR_TASK_ID" \
+  -H "Accept: application/json" \
+  -H "Authorization: Bearer pit-1dd731f9-e51f-40f7-bf4e-9e8cd31ed75f" \
+  -H "Content-Type: application/json" \
+  -H "Version: 2021-07-28" \
+  --data '{
+    "title": "Updated Task Title",
+    "completed": true
+  }'
+
+# 4. DELETE TASK (DELETE)
+curl -X DELETE "https://services.leadconnectorhq.com/locations/b7vHWUGVUNQGoIlAXabY/tasks/YOUR_TASK_ID" \
+  -H "Accept: application/json" \
+  -H "Authorization: Bearer pit-1dd731f9-e51f-40f7-bf4e-9e8cd31ed75f" \
+  -H "Version: 2021-07-28"
+
+# 5. CREATE CONTACT (POST)
+curl -X POST "https://services.leadconnectorhq.com/contacts/?locationId=b7vHWUGVUNQGoIlAXabY" \
+  -H "Accept: application/json" \
+  -H "Authorization: Bearer pit-1dd731f9-e51f-40f7-bf4e-9e8cd31ed75f" \
+  -H "Content-Type: application/json" \
+  -H "Version: 2021-07-28" \
+  --data '{
+    "firstName": "John",
+    "lastName": "Doe",
+    "email": "john.doe@example.com",
+    "phone": "+1234567890"
+  }'
+
+# ========================================
+# 🔧 IMPORTANT FIXES MADE:
+# ========================================
+# 1. Added the main curl command
+# 2. Fixed JSON syntax (removed trailing comma after assignedTo)
+# 3. Updated dueDate to future date
+# 4. Set completed to false (logical for new task)
+# 5. Used proper line continuation with backslashes
+# 6. Added proper quotes around JSON values
+# 7. Removed assignedTo field to avoid permission issues
+
+# ========================================
+# 📝 NOTES:
+# ========================================
+# - Replace YOUR_CONTACT_ID with actual contact ID
+# - Replace YOUR_TASK_ID with actual task ID  
+# - Ensure your API token has proper permissions
+# - Use future dates for dueDate
+# - Test with small requests first

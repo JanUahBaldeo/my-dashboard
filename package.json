@@ -1,0 +1,63 @@
+{
+  "name": "professional-pipeline-dashboard",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Professional Pipeline Dashboard - Enterprise-grade React application with GoHighLevel integration",
+  "keywords": [
+    "dashboard",
+    "pipeline",
+    "gohighlevel",
+    "calendar",
+    "appointments",
+    "react",
+    "typescript",
+    "monorepo"
+  ],
+  "author": "Professional Development Team",
+  "license": "MIT",
+  "workspaces": [
+    "apps/*",
+    "packages/*",
+    "services/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace=apps/dashboard",
+    "dev:dashboard": "npm run dev --workspace=apps/dashboard",
+    "build": "npm run build --workspaces --if-present",
+    "build:dashboard": "npm run build --workspace=apps/dashboard",
+    "lint": "npm run lint --workspaces --if-present",
+    "lint:fix": "npm run lint:fix --workspaces --if-present",
+    "format": "npm run format --workspaces --if-present",
+    "clean": "npm run clean --workspaces --if-present && rm -rf apps/*/dist packages/*/dist services/*/dist",
+    "install:all": "npm install --workspaces",
+    "update:all": "npm update --workspaces",
+    "test": "npm run test --workspaces --if-present",
+    "test:unit": "npm run test:unit --workspaces --if-present",
+    "test:integration": "npm run test:integration --workspaces --if-present",
+    "docs:dev": "echo 'Documentation server - see /docs directory'",
+    "diagnostics": "node tools/diagnostics/enhanced_calendar_diagnostic.js",
+    "check-health": "npm run lint && npm run build"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.0",
+    "cross-env": "^7.0.3",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "eslint": "^8.50.0",
+    "eslint-plugin-react": "^7.33.0",
+    "eslint-plugin-react-hooks": "^4.6.0",
+    "prettier": "^3.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=8.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/your-org/professional-pipeline-dashboard.git"
+  },
+  "bugs": {
+    "url": "https://github.com/your-org/professional-pipeline-dashboard/issues"
+  },
+  "homepage": "https://github.com/your-org/professional-pipeline-dashboard#readme"
+}
