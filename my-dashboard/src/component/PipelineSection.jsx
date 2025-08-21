@@ -1,12 +1,13 @@
 import { useEffect, useState, useRef } from 'react';
-import PipelineCard from './PipelineCard';
 import { ResponsiveContainer, BarChart, Bar, XAxis, Tooltip } from 'recharts';
+import { motion, AnimatePresence } from 'framer-motion';
+import PipelineCard from './PipelineCard';
 
 const PipelineSection = () => {
-  const scrollRef = useRef(null);
   const [activeCard, setActiveCard] = useState(null);
   const [filterStage, setFilterStage] = useState('All');
   const [pipelineData, setPipelineData] = useState([]);
+  const sectionRef = useRef(null);
 
   const fallbackData = [
     { stage: 'New Lead', color: 'teal', icon: '🟢', leadCount: 25, avgTime: '2:30', conversion: '12%', title: 'Lead A', desc: 'Initial contact made.' },
@@ -24,30 +25,16 @@ const PipelineSection = () => {
       .catch(() => setPipelineData(fallbackData));
   }, []);
 
-  const scroll = (dir) => {
-    scrollRef.current.scrollBy({
-      left: dir === 'left' ? -500 : 500,
-      behavior: 'smooth',
-    });
-  };
-
-  const filteredData =
-    filterStage === 'All'
-      ? pipelineData
-      : pipelineData.filter((item) => item.stage === filterStage);
+  const filteredData = filterStage === 'All'
+    ? pipelineData
+    : pipelineData.filter((item) => item.stage === filterStage);
 
   return (
-    <section className="relative w-full bg-white dark:bg-gray-800 px-6 sm:px-10 py-10 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 animate-fade-in text-gray-800 dark:text-white">
-      {/* Header + Arrows */}
+    <section ref={sectionRef} className="relative w-full px-4 sm:px-6 py-8 text-gray-800 dark:text-white">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
         <h2 className="text-2xl sm:text-3xl font-bold">🧭 Pipeline Overview</h2>
-        <div className="flex gap-3 text-xl">
-          <button onClick={() => scroll('left')} className="hover:text-teal-600 transition">←</button>
-          <button onClick={() => scroll('right')} className="hover:text-teal-600 transition">→</button>
-        </div>
       </div>
 
-      {/* Stage Filters */}
       <div className="flex flex-wrap gap-3 mb-6">
         {['All', 'New Lead', 'Contacted', 'Application Started', 'Pre-Approved', 'In Underwriting', 'Closed'].map((stage) => (
           <button
@@ -64,69 +51,81 @@ const PipelineSection = () => {
         ))}
       </div>
 
-      {/* Horizontal Scrollable Pipeline Cards */}
-      <div
-        ref={scrollRef}
-        className="flex gap-6 overflow-x-auto scroll-smooth snap-x snap-mandatory pb-4"
-      >
-        {filteredData.map((item, i) => (
-          <div
-            key={i}
-            className="snap-start flex-shrink-0 cursor-pointer"
-            onClick={() => setActiveCard(item)}
-          >
-            <PipelineCard {...item} />
-          </div>
-        ))}
+      <div className="mb-10">
+        <div className="flex flex-wrap gap-11 pl-4">
+          {filteredData.map((item, i) => (
+            <motion.div
+              key={i}
+              whileHover={{ y: -6, scale: 1.02 }}
+              transition={{ type: 'spring', stiffness: 200 }}
+              className="min-w-[240px] max-w-[240px] flex-shrink-0"
+              onClick={() => setActiveCard(item)}
+            >
+              <PipelineCard {...item} />
+            </motion.div>
+          ))}
+        </div>
       </div>
 
-      {/* Modal View for Active Card */}
-      {activeCard && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
-          <div className="bg-white dark:bg-gray-900 text-gray-800 dark:text-white w-full max-w-3xl p-8 rounded-2xl shadow-2xl relative animate-fade-in">
-            <button
-              onClick={() => setActiveCard(null)}
-              className="absolute top-4 right-6 text-gray-500 dark:text-gray-300 text-2xl hover:text-gray-700 dark:hover:text-white"
+      <AnimatePresence>
+        {activeCard && (
+          <motion.div
+            key="modal"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute left-0 right-0 top-0 bg-black bg-opacity-50 z-50 flex items-center justify-center px-4"
+            style={{ minHeight: sectionRef.current?.offsetHeight || 'auto' }}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              transition={{ duration: 0.25 }}
+              className="bg-white dark:bg-gray-900 text-gray-800 dark:text-white w-full max-w-lg sm:max-w-xl md:max-w-2xl p-6 sm:p-8 rounded-xl shadow-2xl relative"
             >
-              ×
-            </button>
-            <h2 className="text-2xl sm:text-3xl font-bold mb-4">
-              {activeCard.stage} Details
-            </h2>
-            <p className="mb-2 text-sm">
-              <strong>Leads:</strong> {activeCard.leadCount}
-            </p>
-            <p className="mb-2 text-sm">
-              <strong>Avg Time:</strong> {activeCard.avgTime}
-            </p>
-            <p className="mb-4 text-sm">
-              <strong>Conversion:</strong> {activeCard.conversion}
-            </p>
-            <p className="mb-6 text-sm text-gray-700 dark:text-gray-300">{activeCard.desc}</p>
+              <button
+                onClick={() => setActiveCard(null)}
+                className="absolute top-4 right-6 text-gray-400 hover:text-gray-600 dark:text-gray-300 dark:hover:text-white text-xl"
+              >
+                ×
+              </button>
+              <h2 className="text-xl sm:text-2xl font-bold mb-4">
+                {activeCard.stage} Details
+              </h2>
+              <div className="space-y-2 text-sm sm:text-base">
+                <p><strong>Leads:</strong> {activeCard.leadCount}</p>
+                <p><strong>Avg Time:</strong> {activeCard.avgTime}</p>
+                <p><strong>Conversion:</strong> {activeCard.conversion}</p>
+                <p className="text-gray-600 dark:text-gray-300">{activeCard.desc}</p>
+              </div>
 
-            <ResponsiveContainer width="100%" height={200}>
-              <BarChart data={[{ name: 'Week 1', value: 20 }, { name: 'Week 2', value: 35 }]}>
-                <XAxis dataKey="name" stroke="#94a3b8" />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: isDarkTheme() ? '#1f2937' : '#ffffff',
-                    color: isDarkTheme() ? '#e5e7eb' : '#0f172a',
-                    borderRadius: 6,
-                    fontSize: 12,
-                  }}
-                />
-                <Bar dataKey="value" fill="#14b8a6" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-      )}
+              <div className="mt-6">
+                <ResponsiveContainer width="100%" height={200}>
+                  <BarChart data={[{ name: 'Week 1', value: 20 }, { name: 'Week 2', value: 35 }]}>
+                    <XAxis dataKey="name" stroke="#94a3b8" />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: isDarkTheme() ? '#1f2937' : '#ffffff',
+                        color: isDarkTheme() ? '#e5e7eb' : '#0f172a',
+                        borderRadius: 6,
+                        fontSize: 12,
+                      }}
+                    />
+                    <Bar dataKey="value" fill="#14b8a6" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </section>
   );
 };
 
-// Optional helper to check system theme
 const isDarkTheme = () =>
+  typeof window !== 'undefined' &&
   document.documentElement.classList.contains('dark');
 
 export default PipelineSection;
