@@ -1,6 +1,7 @@
 // ========================================
-// 📊 CALL DASHBOARD (Combined)
-// - KPI cards + Hourly Call Activity + Recent Calls
+// 📊 CALL DASHBOARD (KPI grid + Recent Calls)
+// - Layout matches reference: 2x2 KPI cards on the left, Recent Calls list on the right
+// - Hourly Call Activity REMOVED
 // - TailwindCSS + Framer Motion + react-icons
 // ========================================
 
@@ -11,7 +12,6 @@ import {
   FiPhoneCall,
   FiVoicemail,
   FiClock,
-  FiCalendar,
   FiTrendingUp,
   FiPhoneOff,
   FiUser,
@@ -33,16 +33,6 @@ export default function CallDashboard() {
       bgColor: 'bg-blue-50',
     },
     {
-      label: 'Connected Calls',
-      value: '189',
-      change: '76.5%',
-      changeType: 'rate',
-      subtitle: 'connection rate',
-      icon: FiPhoneCall,
-      color: 'text-green-500',
-      bgColor: 'bg-green-50',
-    },
-    {
       label: 'Voicemails',
       value: '27',
       change: '31',
@@ -62,18 +52,16 @@ export default function CallDashboard() {
       color: 'text-purple-500',
       bgColor: 'bg-purple-50',
     },
-  ];
-
-  const hourlyData = [
-    { hour: '9 AM', connected: 9, other: 2, total: 11 },
-    { hour: '10 AM', connected: 14, other: 18, total: 32 },
-    { hour: '11 AM', connected: 12, other: 15, total: 27 },
-    { hour: '12 PM', connected: 6, other: 8, total: 14 },
-    { hour: '1 PM', connected: 7, other: 10, total: 17 },
-    { hour: '2 PM', connected: 17, other: 22, total: 39 },
-    { hour: '3 PM', connected: 15, other: 19, total: 34 },
-    { hour: '4 PM', connected: 13, other: 16, total: 29 },
-    { hour: '5 PM', connected: 11, other: 14, total: 25 },
+    {
+      label: 'Connected Calls',
+      value: '189',
+      change: '76.5%',
+      changeType: 'rate',
+      subtitle: 'connection rate',
+      icon: FiPhoneCall,
+      color: 'text-green-500',
+      bgColor: 'bg-green-50',
+    },
   ];
 
   const calls = [
@@ -134,11 +122,6 @@ export default function CallDashboard() {
   // =============================
   const [activeFilter, setActiveFilter] = useState('All');
 
-  const maxCalls = useMemo(
-    () => Math.max(...hourlyData.map((d) => d.total || d.connected + d.other)),
-    [hourlyData],
-  );
-
   const filteredCalls = useMemo(() => {
     if (activeFilter === 'All') return calls;
     if (activeFilter === 'Inbound')
@@ -168,104 +151,43 @@ export default function CallDashboard() {
         <p className="text-gray-600 dark:text-gray-400 mt-1">Overview of call performance and communication metrics</p>
       </div>
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        {callStats.map((stat, index) => (
-          <motion.div
-            key={stat.label}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: index * 0.05 }}
-            className="bg-white dark:bg-gray-800 rounded-lg p-4 shadow-sm border border-gray-200 dark:border-gray-700"
-          >
-            <div className="flex items-center justify-between mb-3">
-              <div className={`p-2 rounded-lg ${stat.bgColor} dark:bg-gray-700`}>
-                <stat.icon size={20} className={stat.color} />
-              </div>
-              {stat.changeType === 'positive' && (
-                <div className="flex items-center text-green-500 text-sm">
-                  <FiTrendingUp size={14} className="mr-1" />
-                  {stat.change}
-                </div>
-              )}
-            </div>
-            <div className="mb-1">
-              <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">{stat.value}</div>
-              <div className="text-sm text-gray-600 dark:text-gray-400">{stat.label}</div>
-            </div>
-            <div className="text-xs text-gray-500 dark:text-gray-400">
-              {stat.changeType === 'rate' ? (
-                <span className="text-green-600 font-medium">{stat.change}</span>
-              ) : stat.changeType === 'secondary' ? (
-                <span>{stat.change}</span>
-              ) : null} {stat.subtitle}
-            </div>
-          </motion.div>
-        ))}
-      </div>
-
-      {/* Bottom Grid: Hourly Activity (left) + Recent Calls (right) */}
+      {/* Two-column layout: KPI grid (left) + Recent Calls (right) */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Hourly Call Activity */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm border border-gray-200 dark:border-gray-700 lg:col-span-2">
-          <div className="flex items-center gap-2 mb-6">
-            <FiCalendar size={20} className="text-gray-600 dark:text-gray-400" />
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Hourly Call Activity</h3>
-          </div>
-
-          <div className="space-y-4">
-            {hourlyData.map((data, index) => {
-              const connectedPercentage = (data.connected / maxCalls) * 100;
-              const otherPercentage = (data.other / maxCalls) * 100;
-              return (
-                <motion.div
-                  key={data.hour}
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: index * 0.04 }}
-                  className="flex items-center gap-4"
-                >
-                  {/* Hour Label */}
-                  <div className="w-16 text-sm font-medium text-gray-700 dark:text-gray-300">{data.hour}</div>
-
-                  {/* Bars */}
-                  <div className="flex-1">
-                    <div className="flex h-8 rounded-lg overflow-hidden">
-                      {/* Connected (Green) */}
-                      <div
-                        className="bg-green-500 flex items-center justify-center text-white text-xs font-medium"
-                        style={{ width: `${connectedPercentage}%` }}
-                      >
-                        {data.connected > 0 && data.connected}
-                      </div>
-                      {/* Other (Blue) */}
-                      <div
-                        className="bg-blue-500 flex items-center justify-center text-white text-xs font-medium"
-                        style={{ width: `${otherPercentage}%` }}
-                      >
-                        {data.other > 0 && data.other}
-                      </div>
-                    </div>
+        {/* KPI Cards - 2x2 grid */}
+        <div className="lg:col-span-2 grid grid-cols-2 gap-4">
+          {callStats.map((stat, index) => (
+            <motion.div
+              key={stat.label}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: index * 0.05 }}
+              className="bg-white dark:bg-gray-800 rounded-lg p-5 shadow-sm border border-gray-200 dark:border-gray-700"
+            >
+              <div className="flex items-center justify-between mb-3">
+                <div className={`p-2 rounded-lg ${stat.bgColor} dark:bg-gray-700`}>
+                  <stat.icon size={20} className={stat.color} />
+                </div>
+                {stat.changeType === 'positive' && (
+                  <div className="flex items-center text-green-500 text-sm">
+                    <FiTrendingUp size={14} className="mr-1" />
+                    {stat.change}
                   </div>
-
-                  {/* Connected Count */}
-                  <div className="w-24 text-sm text-gray-600 dark:text-gray-400 text-right">{data.connected} connected</div>
-                </motion.div>
-              );
-            })}
-          </div>
-
-          {/* Legend */}
-          <div className="flex items-center gap-6 mt-6 pt-4 border-t border-gray-200 dark:border-gray-700">
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-4 bg-green-500 rounded"></div>
-              <span className="text-sm text-gray-600 dark:text-gray-400">Connected Calls</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-4 bg-blue-500 rounded"></div>
-              <span className="text-sm text-gray-600 dark:text-gray-400">Other Calls</span>
-            </div>
-          </div>
+                )}
+              </div>
+              <div className="mb-1">
+                <div className="text-3xl font-bold text-gray-900 dark:text-gray-100">{stat.value}</div>
+                <div className="text-sm text-gray-600 dark:text-gray-400">{stat.label}</div>
+              </div>
+              <div className="text-xs text-gray-500 dark:text-gray-400">
+                {stat.changeType === 'rate' ? (
+                  <span className="text-green-600 font-medium">{stat.change}</span>
+                ) : stat.changeType === 'secondary' ? (
+                  <span>{stat.change}</span>
+                ) : null}{' '}
+                {stat.subtitle}
+              </div>
+            </motion.div>
+          ))}
         </div>
 
         {/* Recent Calls */}
@@ -289,7 +211,7 @@ export default function CallDashboard() {
             </div>
           </div>
 
-          <div className="space-y-0">
+          <div className="divide-y divide-gray-200 dark:divide-gray-700">
             <AnimatePresence initial={false}>
               {filteredCalls.map((call, index) => (
                 <motion.div
@@ -298,11 +220,7 @@ export default function CallDashboard() {
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -10 }}
                   transition={{ delay: index * 0.05 }}
-                  className={`flex items-center gap-4 p-4 ${
-                    index !== filteredCalls.length - 1
-                      ? 'border-b border-gray-200 dark:border-gray-700'
-                      : ''
-                  }`}
+                  className="flex items-center gap-4 py-4"
                 >
                   {/* Status Icon */}
                   <div className="flex-shrink-0">
@@ -311,22 +229,21 @@ export default function CallDashboard() {
                     </div>
                   </div>
 
-                  {/* Caller info */}
-                  <div className="flex-1 min-w-0">
-                    <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{call.name}</h4>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">{call.phone}</p>
-                  </div>
-
-                  {/* Details */}
-                  <div className="flex items-center gap-4 text-xs text-gray-600 dark:text-gray-400">
-                    <div className="flex items-center gap-1">
-                      <FiUser size={12} />
-                      <span>{call.agent}</span>
+                  {/* Row content, laid out to match reference */}
+                  <div className="flex-1 grid grid-cols-5 items-center gap-4">
+                    {/* Caller / phone */}
+                    <div className="col-span-2 min-w-0">
+                      <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{call.agent}</h4>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">{call.phone}</p>
                     </div>
-                    <div className="flex items-center gap-1">
+
+                    {/* Duration */}
+                    <div className="flex items-center gap-1 text-xs text-gray-600 dark:text-gray-400">
                       <FiClock size={12} />
                       <span>{call.duration}</span>
                     </div>
+
+                    {/* Status pill */}
                     <span
                       className={`px-2 py-1 rounded-full text-xs font-medium ${
                         call.type === 'connected'
@@ -338,19 +255,21 @@ export default function CallDashboard() {
                     >
                       {call.status}
                     </span>
-                    <span>{call.time}</span>
+
+                    {/* Time */}
+                    <div className="text-xs text-gray-600 dark:text-gray-400 text-right">{call.time}</div>
                   </div>
                 </motion.div>
               ))}
             </AnimatePresence>
-
-            {filteredCalls.length === 0 && (
-              <div className="text-center py-8">
-                <div className="text-gray-400 text-lg mb-2">No calls found</div>
-                <div className="text-gray-500 text-sm">Try adjusting your filter or check back later.</div>
-              </div>
-            )}
           </div>
+
+          {filteredCalls.length === 0 && (
+            <div className="text-center py-8">
+              <div className="text-gray-400 text-lg mb-2">No calls found</div>
+              <div className="text-gray-500 text-sm">Try adjusting your filter or check back later.</div>
+            </div>
+          )}
         </div>
       </div>
     </div>

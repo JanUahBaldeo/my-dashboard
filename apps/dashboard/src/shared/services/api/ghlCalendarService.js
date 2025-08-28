@@ -114,7 +114,7 @@ async function getCalendarEvents(calendarId, startTime, endTime) {
 }
 
 /**
- * Get calendars list
+ * Get calendars list with timezone information
  * @param {string} locationId
  * @param {string|null} groupId
  * @returns {Promise<Object>}
@@ -128,9 +128,106 @@ async function getCalendarsList(locationId, groupId = null) {
   const base = cfg.baseUrl || 'https://services.leadconnectorhq.com';
   const url = `${base}/calendars/?${qs({ locationId, groupId })}`;
 
-  return apiRequest(url, {
+  const response = await apiRequest(url, {
     headers: buildHeaders({ token: cfg.token, version: cfg.version, json: false }),
   });
+
+  // Enhance calendar data with timezone information
+  if (response.calendars && Array.isArray(response.calendars)) {
+    // Fetch location timezone for fallback
+    let locationTimezone = 'America/Los_Angeles';
+    try {
+      const timezoneResponse = await getLocationTimezone(locationId);
+      locationTimezone = timezoneResponse.timezone || locationTimezone;
+    } catch (_error) {
+      console.warn('Failed to fetch location timezone, using fallback:', locationTimezone);
+    }
+
+    // Add timezone information to each calendar
+    response.calendars = response.calendars.map(calendar => ({
+      ...calendar,
+      // Use calendar-specific timezone if available, otherwise location timezone
+      timezone: calendar.timezone || calendar.timeZone || locationTimezone,
+      // Add formatted timezone display
+      timezoneDisplay: formatTimezone(calendar.timezone || calendar.timeZone || locationTimezone),
+    }));
+  }
+
+  return response;
+}
+
+/**
+ * Get location timezone information
+ * @param {string} locationId
+ * @returns {Promise<Object>}
+ */
+async function getLocationTimezone(locationId) {
+  if (!locationId || typeof locationId !== 'string') {
+    throw new Error('locationId is required and must be a string');
+  }
+
+  const cfg = await getConfig();
+  const base = cfg.baseUrl || 'https://services.leadconnectorhq.com';
+  const url = `${base}/locations/${encodeURIComponent(locationId)}/timezones`;
+
+  try {
+    const response = await apiRequest(url, {
+      headers: buildHeaders({ token: cfg.token, version: cfg.version, json: false }),
+    });
+
+    // Handle various response formats from GHL timezone API
+    let timezone = 'America/Los_Angeles';
+
+    if (Array.isArray(response) && response.length > 0) {
+      timezone = response[0];
+    } else if (response.timezones && Array.isArray(response.timezones) && response.timezones.length > 0) {
+      timezone = response.timezones[0];
+    } else if (response.timezone) {
+      timezone = response.timezone;
+    } else if (response.data && Array.isArray(response.data) && response.data.length > 0) {
+      timezone = response.data[0];
+    }
+
+    return {
+      timezone,
+      display: formatTimezone(timezone),
+    };
+  } catch (error) {
+    console.warn('Failed to fetch location timezone from API:', error.message);
+    return {
+      timezone: 'America/Los_Angeles',
+      display: formatTimezone('America/Los_Angeles'),
+    };
+  }
+}
+
+/**
+ * Format timezone for display
+ * @param {string} timezone
+ * @returns {string}
+ */
+function formatTimezone(timezone) {
+  try {
+    const now = new Date();
+    const utc = new Date(now.getTime() + (now.getTimezoneOffset() * 60000));
+    const localTime = new Date(utc.toLocaleString('en-US', { timeZone: timezone }));
+    const offset = (localTime.getTime() - utc.getTime()) / (1000 * 60 * 60);
+
+    const sign = offset >= 0 ? '+' : '-';
+    const absOffset = Math.abs(offset);
+    const hours = Math.floor(absOffset);
+    const minutes = (absOffset - hours) * 60;
+    const offsetStr = `GMT${sign}${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+
+    const abbreviation = new Intl.DateTimeFormat('en', {
+      timeZone: timezone,
+      timeZoneName: 'short',
+    }).formatToParts(now).find(part => part.type === 'timeZoneName')?.value || '';
+
+    return `${offsetStr} ${timezone} ${abbreviation ? `(${abbreviation})` : ''}`.trim();
+  } catch (_error) {
+    return timezone;
+  }
 }
 
 /**
@@ -221,6 +318,7 @@ export {
   getCalendarEvents,
   getCalendarDetails,
   getCalendarsList,
+  getLocationTimezone,
   fetchGHLCalendarEvents,
   fetchGHLCalendarEventsByDateRange,
   createBlockSlot,

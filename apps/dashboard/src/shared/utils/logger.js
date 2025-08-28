@@ -13,11 +13,14 @@ const LOG_LEVELS = {
 const currentLogLevel = process.env.NODE_ENV === 'production' ? LOG_LEVELS.ERROR : LOG_LEVELS.DEBUG;
 
 class Logger {
-  constructor(context = 'App') {
+  constructor(context = 'App', disabled = false) {
     this.context = context;
+    this.disabled = disabled;
   }
 
   error(message, error = null, data = null) {
+    if (this.disabled) return;
+
     if (currentLogLevel >= LOG_LEVELS.ERROR) {
       const logData = {
         level: 'ERROR',
@@ -36,6 +39,8 @@ class Logger {
   }
 
   warn(message, data = null) {
+    if (this.disabled) return;
+
     if (currentLogLevel >= LOG_LEVELS.WARN) {
       const logData = {
         level: 'WARN',
@@ -52,6 +57,8 @@ class Logger {
   }
 
   info(message, data = null) {
+    if (this.disabled) return;
+
     if (currentLogLevel >= LOG_LEVELS.INFO) {
       const logData = {
         level: 'INFO',
@@ -68,6 +75,8 @@ class Logger {
   }
 
   debug(message, data = null) {
+    if (this.disabled) return;
+
     if (currentLogLevel >= LOG_LEVELS.DEBUG) {
       const logData = {
         level: 'DEBUG',
@@ -84,6 +93,8 @@ class Logger {
   }
 
   success(message, data = null) {
+    if (this.disabled) return;
+
     if (currentLogLevel >= LOG_LEVELS.INFO) {
       const logData = {
         level: 'SUCCESS',
@@ -108,6 +119,6 @@ export const logger = new Logger();
 
 // Context-specific loggers
 export const apiLogger = new Logger('API');
-export const pipelineLogger = new Logger('Pipeline');
+export const pipelineLogger = new Logger('Pipeline', true); // Disabled pipeline logger
 export const taskLogger = new Logger('Task');
 export const uiLogger = new Logger('UI');

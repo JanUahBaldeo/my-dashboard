@@ -1,15 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useRef } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import {
-  FiCalendar,
-  FiX,
-  FiClock,
-  FiUser,
-  FiMapPin,
-  FiTag,
-  FiChevronDown,
-  FiChevronUp,
-} from 'react-icons/fi';
+import { FiCalendar, FiX } from 'react-icons/fi';
 
 const CalendarList = ({
   isOpen,
@@ -18,14 +9,9 @@ const CalendarList = ({
   selectedCalendars = new Set(),
   onCalendarSelection = () => {},
   isLoading = false,
-  ghlEvents = {},
 }) => {
-  const [expandedCalendars, setExpandedCalendars] = useState(new Set());
-
-  // Auto-expand selected calendars
-  useEffect(() => {
-    setExpandedCalendars(new Set(selectedCalendars));
-  }, [selectedCalendars]);
+  const modalRef = useRef(null);
+  const closeBtnRef = useRef(null);
 
   // Close on Escape
   useEffect(() => {
@@ -35,6 +21,45 @@ const CalendarList = ({
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [isOpen, onClose]);
 
+  // Prevent background scroll when modal is open
+  useEffect(() => {
+    if (!isOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [isOpen]);
+
+  // Initial focus + simple focus trap within the modal
+  useEffect(() => {
+    if (!isOpen || !modalRef.current) return;
+
+    const focusable = modalRef.current.querySelectorAll(
+      'a[href], button, input, textarea, select, [tabindex]:not([tabindex="-1"])',
+    );
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+
+    // move initial focus
+    (closeBtnRef.current || first)?.focus();
+
+    const onKeyDown = (e) => {
+      if (e.key !== 'Tab') return;
+      if (focusable.length === 0) return;
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last?.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first?.focus();
+      }
+    };
+
+    modalRef.current.addEventListener('keydown', onKeyDown);
+    return () => modalRef.current?.removeEventListener('keydown', onKeyDown);
+  }, [isOpen]);
+
   const handleCalendarSelect = useCallback(
     (calendar) => {
       const isSelected = selectedCalendars.has(calendar.id);
@@ -42,37 +67,6 @@ const CalendarList = ({
     },
     [onCalendarSelection, selectedCalendars],
   );
-
-  const toggleCalendarExpansion = useCallback((calendarId) => {
-    setExpandedCalendars((prev) => {
-      const next = new Set(prev);
-      next.has(calendarId) ? next.delete(calendarId) : next.add(calendarId);
-      return next;
-    });
-  }, []);
-
-  const formatEventDate = (dateLike) => {
-    const d = new Date(dateLike);
-    if (Number.isNaN(d.getTime())) return { date: 'Invalid Date', time: 'Invalid Time' };
-    return {
-      date: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', weekday: 'short' }),
-      time: d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }),
-    };
-  };
-
-  const getCalendarEvents = (calendarId) => {
-    const arr = Array.isArray(ghlEvents?.[calendarId]) ? ghlEvents[calendarId] : [];
-    // De-dup by (id || title + start)
-    const seen = new Set();
-    const out = [];
-    for (const e of arr) {
-      const key = `${e.id || e.appointmentId || e.title || 'evt'}::${e.startTime || e.start || ''}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      out.push(e);
-    }
-    return out;
-  };
 
   return (
     <AnimatePresence>
@@ -86,6 +80,7 @@ const CalendarList = ({
           onClick={onClose}
         >
           <motion.div
+            ref={modalRef}
             key="calendar-list-modal"
             initial={{ scale: 0.96, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
@@ -111,6 +106,7 @@ const CalendarList = ({
                 </div>
               </div>
               <button
+                ref={closeBtnRef}
                 type="button"
                 onClick={onClose}
                 className="rounded-lg p-2 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
@@ -139,14 +135,13 @@ const CalendarList = ({
                   </div>
                 </div>
               ) : (
-                <div className="space-y-4">
+                <div className="space-y-4" role="list" aria-label="Available calendars">
                   {availableCalendars.map((calendar) => {
                     const isSelected = selectedCalendars.has(calendar.id);
-                    const isExpanded = expandedCalendars.has(calendar.id);
-                    const events = isSelected && isExpanded ? getCalendarEvents(calendar.id) : [];
 
                     return (
                       <motion.div
+                        role="listitem"
                         key={calendar.id}
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
@@ -157,17 +152,26 @@ const CalendarList = ({
                         }`}
                       >
                         {/* Calendar Row */}
-                        <div className="flex items-center gap-4">
-                          <label className="flex cursor-pointer items-center">
+                        <div
+                          className="flex items-center gap-4 cursor-pointer"
+                          onClick={() => handleCalendarSelect(calendar)}
+                          role="button"
+                          tabIndex={0}
+                          onKeyDown={(e) =>
+                            (e.key === 'Enter' || e.key === ' ') && handleCalendarSelect(calendar)
+                          }
+                        >
+                          <label htmlFor={`cal-${calendar.id}`} className="flex cursor-pointer items-center">
                             <input
+                              id={`cal-${calendar.id}`}
                               type="checkbox"
                               checked={isSelected}
+                              onClick={(e) => e.stopPropagation()}
                               onChange={() => handleCalendarSelect(calendar)}
                               className="h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-2 focus:ring-blue-500"
                               aria-label={`Select ${calendar.name || 'calendar'}`}
                             />
                           </label>
-
                           <div className="flex-1">
                             <h3 className="text-lg font-semibold text-gray-900">
                               {calendar.name || 'Unnamed Calendar'}
@@ -189,104 +193,7 @@ const CalendarList = ({
                               )}
                             </div>
                           </div>
-
-                          {isSelected && (
-                            <button
-                              type="button"
-                              onClick={() => toggleCalendarExpansion(calendar.id)}
-                              className="rounded-lg p-2 text-blue-600 transition-colors hover:bg-blue-100"
-                              aria-label={isExpanded ? 'Collapse' : 'Expand'}
-                            >
-                              {isExpanded ? (
-                                <FiChevronUp className="h-5 w-5" />
-                              ) : (
-                                <FiChevronDown className="h-5 w-5" />
-                              )}
-                            </button>
-                          )}
                         </div>
-
-                        {/* Events */}
-                        <AnimatePresence initial={false}>
-                          {isSelected && isExpanded && (
-                            <motion.div
-                              key={`${calendar.id}-events`}
-                              initial={{ height: 0, opacity: 0 }}
-                              animate={{ height: 'auto', opacity: 1 }}
-                              exit={{ height: 0, opacity: 0 }}
-                              transition={{ duration: 0.2 }}
-                              className="mt-4 overflow-hidden border-t border-gray-200 pt-4"
-                            >
-                              {events.length > 0 ? (
-                                <div className="space-y-2">
-                                  <h4 className="flex items-center gap-2 font-medium text-gray-900">
-                                    <FiClock className="h-4 w-4" />
-                                    Scheduled Items ({events.length})
-                                  </h4>
-
-                                  <div className="max-h-64 space-y-2 overflow-y-auto">
-                                    {events.map((event, idx) => {
-                                      const when = formatEventDate(event.startTime || event.start);
-                                      return (
-                                        <div
-                                          key={event.id || event.appointmentId || idx}
-                                          className="rounded-lg border border-gray-100 bg-white p-3 transition-colors hover:border-blue-200"
-                                        >
-                                          <div className="flex items-start justify-between">
-                                            <div className="flex-1">
-                                              <h5 className="mb-1 font-medium text-gray-900">
-                                                {event.title || 'Untitled Event'}
-                                              </h5>
-                                              <div className="flex flex-wrap items-center gap-4 text-sm text-gray-600">
-                                                <span className="inline-flex items-center gap-1">
-                                                  <FiClock className="h-3 w-3" />
-                                                  {when.date} at {when.time}
-                                                </span>
-                                                {event.contactName ? (
-                                                  <span className="inline-flex items-center gap-1">
-                                                    <FiUser className="h-3 w-3" />
-                                                    {event.contactName}
-                                                  </span>
-                                                ) : null}
-                                                {event.location ? (
-                                                  <span className="inline-flex items-center gap-1">
-                                                    <FiMapPin className="h-3 w-3" />
-                                                    {event.location}
-                                                  </span>
-                                                ) : null}
-                                              </div>
-                                            </div>
-
-                                            {event.status ? (
-                                              <span
-                                                className={`mt-2 inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${
-                                                  event.status === 'confirmed'
-                                                    ? 'bg-green-100 text-green-800'
-                                                    : event.status === 'pending'
-                                                    ? 'bg-yellow-100 text-yellow-800'
-                                                    : 'bg-gray-100 text-gray-800'
-                                                }`}
-                                              >
-                                                <FiTag className="mr-1 h-3 w-3" />
-                                                {event.status}
-                                              </span>
-                                            ) : null}
-                                          </div>
-                                        </div>
-                                      );
-                                    })}
-                                  </div>
-                                </div>
-                              ) : (
-                                <div className="py-8 text-center">
-                                  <FiCalendar className="mx-auto mb-2 h-8 w-8 text-gray-400" aria-hidden="true" />
-                                  <p className="text-gray-600">No scheduled items found</p>
-                                  <p className="text-sm text-gray-500">Events from last week to next month</p>
-                                </div>
-                              )}
-                            </motion.div>
-                          )}
-                        </AnimatePresence>
                       </motion.div>
                     );
                   })}
@@ -297,7 +204,7 @@ const CalendarList = ({
             {/* Footer */}
             <div className="border-t border-gray-200 bg-gray-50 p-6">
               <div className="flex items-center justify-between">
-                <div className="text-sm text-gray-600">
+                <div className="text-sm text-gray-600" aria-live="polite">
                   {selectedCalendars.size} of {availableCalendars.length} calendars selected
                 </div>
                 <button

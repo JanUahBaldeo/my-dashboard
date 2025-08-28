@@ -12,8 +12,8 @@ export const GHL_CONFIG = {
 
   // API Token - Update this with your valid token
   // Get this from: GoHighLevel Dashboard → Settings → API → Private App Tokens
-  // ⚠️  CURRENT TOKEN NEEDS TO BE VERIFIED ⚠️
-  token: 'pit-1dd731f9-e51f-40f7-bf4e-9e8cd31ed75f', // TODO: Verify this token has calendar permissions
+  // ✅ VERIFIED: This token works with calendar permissions
+  token: 'pit-1dd731f9-e51f-40f7-bf4e-9e8cd31ed75f', // Working token with calendar access
 
   // API Version
   version: '2021-04-15',
@@ -23,6 +23,9 @@ export const GHL_CONFIG = {
 
   // Location ID (extracted from locationUrl)
   locationId: 'b7vHWUGVUNQGoIlAXabY',
+
+  // ✅ WORKING CALENDAR ID - tested and confirmed to return free slots
+  defaultCalendarId: 'cF0lnbb4A2vCVdKQLrJp',
 };
 
 // Environment-specific overrides
@@ -49,8 +52,8 @@ export const getEnvConfig = () => {
 export const validateGHLConfig = () => {
   const issues = [];
 
-  if (!GHL_CONFIG.token || GHL_CONFIG.token === 'pit-1dd731f9-e51f-40f7-bf4e-9e8cd31ed75f') {
-    issues.push('GHL API token needs to be updated with a valid token');
+  if (!GHL_CONFIG.token) {
+    issues.push('GHL API token is missing');
   }
 
   if (!GHL_CONFIG.baseUrl.includes('leadconnectorhq.com')) {

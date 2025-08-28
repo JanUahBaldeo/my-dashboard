@@ -1,21 +1,17 @@
-import React, { useState, useContext, useEffect, useRef, useCallback } from 'react';
-import { TaskContext } from '@context/TaskContext';
-import { motion, AnimatePresence } from 'framer-motion';
+import React, { useState, useContext, useEffect, useRef, useCallback, useId } from 'react';
+import PropTypes from 'prop-types';
+import { AnimatePresence, motion } from 'framer-motion';
 import { toast } from 'react-hot-toast';
+import { TaskContext } from '@context/TaskContext';
 import ContactDropdown from './ContactDropdown';
 import AssigneeDropdown from './AssigneeDropdown';
 
 // --------------------------------------
-// Modal: Create / Edit Task
+// Modal: Create / Edit Task (JS, accessible, polished)
 // --------------------------------------
-// Notes:
-// - Removed all console logs and noisy debug output
-// - Centralized validation and ID sanitization
-// - Uses form submit only (button is type="submit") to avoid double handlers
-// - Focuses title when opened for better UX
-// - Accessible dialog semantics
 
 const DEFAULT_TIME = '08:00';
+const MODES = { CREATE: 'create', EDIT: 'edit' };
 
 const isValidId = (id) =>
   !!id &&
@@ -23,41 +19,79 @@ const isValidId = (id) =>
   id !== 'undefined' &&
   id !== 'contact-1' &&
   id.length > 5 &&
-  !id.includes('demo') &&
-  !id.includes('test');
+  !String(id).includes('demo') &&
+  !String(id).includes('test');
 
-const Modal = ({ isOpen, onClose, task = null, mode = 'edit' }) => {
-  const [title, setTitle] = useState(task?.title || '');
-  const [description, setDescription] = useState(task?.body || task?.actions || '');
-  const [showDescription, setShowDescription] = useState(!!task?.body || !!task?.actions);
-  const [date, setDate] = useState(task?.date || '');
+const buildISOIfPossible = (date, time) => {
+  if (!date) return '';
+  const safeTime = time || DEFAULT_TIME; // HH:mm
+  // Keep local tz; do not coerce to Z to match GHL expectations
+  return `${date}T${safeTime}`;
+};
+
+const Modal = ({ isOpen, onClose, task = null, mode = MODES.EDIT }) => {
+  const { addTask, updateTask, deleteTask } = useContext(TaskContext);
+
+  // form state
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [showDescription, setShowDescription] = useState(false);
+  const [date, setDate] = useState('');
   const [time, setTime] = useState(DEFAULT_TIME);
   const [isRecurring, setIsRecurring] = useState(false);
-  const [contactId, setContactId] = useState(task?.contactId || '');
-  const [assigneeId, setAssigneeId] = useState(task?.assigneeId || '');
+  const [contactId, setContactId] = useState('');
+  const [assigneeId, setAssigneeId] = useState('');
   const [errors, setErrors] = useState({ title: false, date: false });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const { addTask, updateTask, deleteTask } = useContext(TaskContext);
   const titleInputRef = useRef(null);
+  const titleId = useId();
+  const descId = useId();
+  const dateId = useId();
+  const timeId = useId();
 
-  // Autofocus when opened
+  // Hydrate state from incoming task or clear for create
+  useEffect(() => {
+    if (!isOpen) return; // don't thrash state when closed
+
+    if (task) {
+      setTitle(task.title || '');
+      const desc = task.body || task.actions || '';
+      setDescription(desc);
+      setShowDescription(!!desc);
+      setDate(task.date || task.dueDate || '');
+      setTime(DEFAULT_TIME);
+      setIsRecurring(false);
+      setContactId(task.contactId || '');
+      setAssigneeId(task.assigneeId || task.assignedTo || '');
+    } else {
+      // new task default
+      setTitle('');
+      setDescription('');
+      setShowDescription(false);
+      setDate('');
+      setTime(DEFAULT_TIME);
+      setIsRecurring(false);
+      setContactId('');
+      setAssigneeId('');
+    }
+    setErrors({ title: false, date: false });
+  }, [isOpen, task]);
+
+  // autofocus title when opened
   useEffect(() => {
     if (isOpen && titleInputRef.current) titleInputRef.current.focus();
   }, [isOpen]);
 
-  // Sync state when task changes
+  // escape to close
   useEffect(() => {
-    if (!task) return;
-    setTitle(task.title || '');
-    setDescription(task.body || task.actions || '');
-    setShowDescription(!!task.body || !!task.actions);
-    setDate(task.date || '');
-    setTime(DEFAULT_TIME);
-    setIsRecurring(false);
-    setContactId(task.contactId || '');
-    setAssigneeId(task.assigneeId || '');
-  }, [task]);
+    if (!isOpen) return;
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [isOpen, onClose]);
 
   const validate = useCallback(() => {
     const next = { title: !title.trim(), date: !date };
@@ -66,13 +100,13 @@ const Modal = ({ isOpen, onClose, task = null, mode = 'edit' }) => {
   }, [title, date]);
 
   const buildTaskPayload = useCallback(() => {
-    const dateTime = date && time ? `${date}T${time}` : date;
-
+    const dueDate = buildISOIfPossible(date, time);
     const payload = {
       title: title.trim(),
       body: showDescription ? description : '',
-      dueDate: dateTime,
+      dueDate,
       completed: false,
+      isRecurring: !!isRecurring,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -80,13 +114,13 @@ const Modal = ({ isOpen, onClose, task = null, mode = 'edit' }) => {
     if (isValidId(contactId)) payload.contactId = contactId;
     if (isValidId(assigneeId)) payload.assignedTo = assigneeId;
 
-    // Remove empty fields
+    // drop empty
     Object.keys(payload).forEach((k) => {
       if (payload[k] === '' || payload[k] === null || payload[k] === undefined) delete payload[k];
     });
 
     return payload;
-  }, [title, description, showDescription, date, time, contactId, assigneeId]);
+  }, [title, description, showDescription, date, time, contactId, assigneeId, isRecurring]);
 
   const resetForm = useCallback(() => {
     setTitle('');
@@ -104,33 +138,31 @@ const Modal = ({ isOpen, onClose, task = null, mode = 'edit' }) => {
     async (e) => {
       e.preventDefault();
       if (isSubmitting) return;
-
       if (!validate()) return;
 
       setIsSubmitting(true);
       const payload = buildTaskPayload();
 
       try {
-        if (mode === 'edit' && task) {
+        if (mode === MODES.EDIT && task) {
           const taskId = task._id || task.id;
           if (!taskId) {
             toast.error('❌ No task ID found for update.');
-            return;
+          } else {
+            const result = await updateTask(taskId, { ...payload });
+            if (!result || !result.success) {
+              toast.error(`❌ Failed to update task: ${result?.error || 'Unknown error'}`);
+            } else {
+              toast.success('✅ Task updated successfully in GoHighLevel!');
+            }
           }
-
-          const result = await updateTask(taskId, { ...payload });
-          if (!result || !result.success) {
-            toast.error(`❌ Failed to update task: ${result?.error || 'Unknown error'}`);
-            return;
-          }
-          toast.success('✅ Task updated successfully in GoHighLevel!');
-        } else if (mode === 'create') {
+        } else if (mode === MODES.CREATE) {
           const result = await addTask('My Sales Tasks', payload);
           if (!result || !result.success) {
             toast.error(`❌ Failed to create task: ${result?.error || 'Unknown error'}`);
-            return;
+          } else {
+            toast.success('✅ Task created successfully in GoHighLevel!');
           }
-          toast.success('✅ Task created successfully in GoHighLevel!');
         }
 
         resetForm();
@@ -141,7 +173,7 @@ const Modal = ({ isOpen, onClose, task = null, mode = 'edit' }) => {
         setIsSubmitting(false);
       }
     },
-    [addTask, updateTask, onClose, task, mode, validate, buildTaskPayload, resetForm, isSubmitting],
+    [isSubmitting, validate, buildTaskPayload, mode, task, updateTask, addTask, resetForm, onClose],
   );
 
   const handleDelete = useCallback(async () => {
@@ -149,7 +181,6 @@ const Modal = ({ isOpen, onClose, task = null, mode = 'edit' }) => {
       toast.error('❌ Cannot delete task: No task ID found');
       return;
     }
-
     try {
       setIsSubmitting(true);
       const taskId = task._id || task.id;
@@ -167,11 +198,10 @@ const Modal = ({ isOpen, onClose, task = null, mode = 'edit' }) => {
     }
   }, [deleteTask, onClose, task]);
 
-  if (!isOpen) return null;
-
   return (
-    <AnimatePresence>
+    <AnimatePresence>{isOpen && (
       <motion.div
+        key="backdrop"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
@@ -179,9 +209,11 @@ const Modal = ({ isOpen, onClose, task = null, mode = 'edit' }) => {
         onClick={onClose}
         role="dialog"
         aria-modal="true"
-        aria-labelledby="task-modal-title"
+        aria-labelledby={titleId}
+        aria-describedby={descId}
       >
         <motion.div
+          key="modal"
           initial={{ scale: 0.95, opacity: 0, y: 20 }}
           animate={{ scale: 1, opacity: 1, y: 0 }}
           exit={{ scale: 0.95, opacity: 0, y: 20 }}
@@ -199,11 +231,11 @@ const Modal = ({ isOpen, onClose, task = null, mode = 'edit' }) => {
                   </svg>
                 </div>
                 <div>
-                  <h2 id="task-modal-title" className="text-2xl font-bold tracking-tight">
-                    {mode === 'edit' ? 'Edit Task' : 'Create New Task'}
+                  <h2 id={titleId} className="text-2xl font-bold tracking-tight">
+                    {mode === MODES.EDIT ? 'Edit Task' : 'Create New Task'}
                   </h2>
-                  <p className="text-blue-100 text-sm mt-1">
-                    {mode === 'edit' ? 'Update your task details' : 'Add a new task to your workflow'}
+                  <p id={descId} className="text-blue-100 text-sm mt-1">
+                    {mode === MODES.EDIT ? 'Update your task details' : 'Add a new task to your workflow'}
                   </p>
                 </div>
               </div>
@@ -224,10 +256,11 @@ const Modal = ({ isOpen, onClose, task = null, mode = 'edit' }) => {
             <form onSubmit={handleSubmit} className="space-y-8">
               {/* Title */}
               <div className="space-y-3">
-                <label className="block text-sm font-semibold text-gray-900 uppercase tracking-wide">
+                <label htmlFor={titleId} className="block text-sm font-semibold text-gray-900 uppercase tracking-wide">
                   Task Title <span className="text-red-500 ml-1">*</span>
                 </label>
                 <input
+                  id={titleId}
                   ref={titleInputRef}
                   type="text"
                   value={title}
@@ -254,13 +287,15 @@ const Modal = ({ isOpen, onClose, task = null, mode = 'edit' }) => {
                 {showDescription ? (
                   <div>
                     <div className="flex items-center justify-between mb-3">
-                      <label className="block text-sm font-semibold text-gray-900 uppercase tracking-wide">
+                      <label htmlFor={descId} className="block text-sm font-semibold text-gray-900 uppercase tracking-wide">
                         Description
                       </label>
                       <button
                         type="button"
                         onClick={() => setShowDescription(false)}
                         className="flex items-center space-x-2 text-sm text-gray-500 hover:text-gray-700 font-medium transition-colors"
+                        aria-controls={descId}
+                        aria-expanded={showDescription}
                       >
                         <div className="w-5 h-5 bg-gray-200 rounded-full flex items-center justify-center">
                           <svg className="w-3 h-3 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -271,6 +306,7 @@ const Modal = ({ isOpen, onClose, task = null, mode = 'edit' }) => {
                       </button>
                     </div>
                     <textarea
+                      id={descId}
                       value={description}
                       onChange={(e) => setDescription(e.target.value)}
                       className="w-full px-4 py-3 border-2 border-gray-200 bg-gray-50 rounded-xl text-base transition-all duration-200 focus:outline-none focus:ring-4 focus:ring-blue-100 focus:border-blue-400 focus:bg-white resize-none"
@@ -283,6 +319,8 @@ const Modal = ({ isOpen, onClose, task = null, mode = 'edit' }) => {
                     type="button"
                     onClick={() => setShowDescription(true)}
                     className="w-full text-left p-4 border-2 border-dashed border-gray-300 rounded-xl hover:border-blue-400 hover:bg-blue-50 transition-all duration-200 group"
+                    aria-controls={descId}
+                    aria-expanded={showDescription}
                   >
                     <div className="flex items-center space-x-3">
                       <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center group-hover:bg-blue-200 transition-colors">
@@ -304,6 +342,7 @@ const Modal = ({ isOpen, onClose, task = null, mode = 'edit' }) => {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="relative">
                     <input
+                      id={dateId}
                       type="date"
                       value={date}
                       onChange={(e) => setDate(e.target.value)}
@@ -319,6 +358,7 @@ const Modal = ({ isOpen, onClose, task = null, mode = 'edit' }) => {
                   </div>
                   <div className="relative">
                     <input
+                      id={timeId}
                       type="time"
                       value={time}
                       onChange={(e) => setTime(e.target.value)}
@@ -348,7 +388,7 @@ const Modal = ({ isOpen, onClose, task = null, mode = 'edit' }) => {
                   </div>
                   <button
                     type="button"
-                    onClick={() => setIsRecurring(!isRecurring)}
+                    onClick={() => setIsRecurring((v) => !v)}
                     className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors duration-200 ${
                       isRecurring ? 'bg-blue-600' : 'bg-gray-300'
                     }`}
@@ -379,7 +419,7 @@ const Modal = ({ isOpen, onClose, task = null, mode = 'edit' }) => {
               {/* Footer Actions */}
               <div className="flex items-center justify-between pt-2">
                 <div className="flex items-center space-x-4">
-                  {mode === 'edit' && task && (
+                  {mode === MODES.EDIT && task && (
                     <button
                       type="button"
                       disabled={isSubmitting}
@@ -417,10 +457,10 @@ const Modal = ({ isOpen, onClose, task = null, mode = 'edit' }) => {
                           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                         </svg>
-                        {mode === 'edit' ? 'Updating...' : 'Creating...'}
+                        {mode === MODES.EDIT ? 'Updating...' : 'Creating...'}
                       </span>
                     ) : (
-                      mode === 'edit' ? 'Update Task' : 'Create Task'
+                      mode === MODES.EDIT ? 'Update Task' : 'Create Task'
                     )}
                   </button>
                 </div>
@@ -429,8 +469,15 @@ const Modal = ({ isOpen, onClose, task = null, mode = 'edit' }) => {
           </div>
         </motion.div>
       </motion.div>
-    </AnimatePresence>
+    )}</AnimatePresence>
   );
+};
+
+Modal.propTypes = {
+  isOpen: PropTypes.bool.isRequired,
+  onClose: PropTypes.func.isRequired,
+  task: PropTypes.object,
+  mode: PropTypes.oneOf([MODES.CREATE, MODES.EDIT]),
 };
 
 export default Modal;

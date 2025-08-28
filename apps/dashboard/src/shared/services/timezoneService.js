@@ -71,6 +71,7 @@ export const fetchGHLAllTimezones = async (locationId = null) => {
 
     // Check cache first
     if (timezoneCache.has(cacheKey)) {
+      console.warn('📦 Using cached timezones for location:', effectiveLocationId);
       return timezoneCache.get(cacheKey);
     }
 
@@ -102,24 +103,34 @@ export const fetchGHLAllTimezones = async (locationId = null) => {
     }
 
     if (!response.ok) {
+      const errorText = await response.text();
+      console.error('❌ API Error Response:', errorText);
       throw new Error(`Failed to fetch timezones: ${response.status} ${response.statusText}`);
     }
 
     const result = await response.json();
+    console.warn('📡 Full API Response:', result);
 
-    // Handle different response formats
+    // Handle different response formats based on the GHL API structure
     let allTimezones = [];
 
-    if (result.timezones && Array.isArray(result.timezones)) {
-      // If we get an array of timezones
+    if (Array.isArray(result)) {
+      // If result is directly an array of timezones
+      allTimezones = result;
+    } else if (result.timezones && Array.isArray(result.timezones)) {
+      // If we get an array of timezones in a wrapper
       allTimezones = result.timezones;
+    } else if (result.data && Array.isArray(result.data)) {
+      // If timezones are in a data property
+      allTimezones = result.data;
     } else if (result.timezone) {
       // If we get a single timezone, wrap it in array
       allTimezones = [result.timezone];
-    } else if (result.data && Array.isArray(result.data)) {
-      // Alternative data structure
-      allTimezones = result.data;
+    } else if (typeof result === 'object' && Object.keys(result).length > 0) {
+      // If result is an object with timezone keys
+      allTimezones = Object.keys(result);
     } else {
+      console.warn('⚠️ Unexpected API response format, using fallback timezones');
       // Fallback to common timezones
       allTimezones = [
         'America/Los_Angeles',
@@ -134,10 +145,39 @@ export const fetchGHLAllTimezones = async (locationId = null) => {
       ];
     }
 
-    // Cache the result
+    // Filter out any invalid timezone entries
+    allTimezones = allTimezones.filter(tz =>
+      typeof tz === 'string' &&
+      tz.length > 0 &&
+      tz.includes('/'),
+    );
+
+    // If no valid timezones found, use fallback
+    if (allTimezones.length === 0) {
+      console.warn('⚠️ No valid timezones found in API response, using fallback');
+      allTimezones = [
+        'America/Los_Angeles',
+        'America/Chicago',
+        'America/New_York',
+        'America/Denver',
+        'Europe/London',
+        'Europe/Paris',
+        'Asia/Tokyo',
+        'Asia/Shanghai',
+        'Asia/Kolkata',
+      ];
+    }
+
+    // Cache the result for 1 hour
     timezoneCache.set(cacheKey, allTimezones);
 
-    console.warn('✅ All timezones fetched:', allTimezones);
+    // Auto-expire cache after 1 hour
+    setTimeout(() => {
+      timezoneCache.delete(cacheKey);
+      console.warn('🗑️ Timezone cache expired for location:', effectiveLocationId);
+    }, 60 * 60 * 1000);
+
+    console.warn('✅ All timezones fetched successfully:', allTimezones.length, 'timezones');
     return allTimezones;
 
   } catch (error) {
@@ -156,8 +196,10 @@ export const fetchGHLAllTimezones = async (locationId = null) => {
       'Asia/Kolkata',
     ];
 
-    const cacheKey = `all-timezones-${locationId}`;
+    const cacheKey = `all-timezones-${locationId || 'fallback'}`;
     timezoneCache.set(cacheKey, fallbackTimezones);
+
+    console.warn('⚠️ Using fallback timezones due to API error');
     return fallbackTimezones;
   }
 };
@@ -260,18 +302,48 @@ export const getTimezoneOptions = async (locationId = null) => {
   }
 };
 
+// Get GHL timezone options (legacy alias for compatibility)
+export const getGHLTimezoneOptions = getTimezoneOptions;
+
 // Enhanced format timezone for display with better formatting
 export const formatTimezoneForDisplay = (timezone = FALLBACK_TIMEZONE) => {
-  const timezoneMap = {
-    'America/Los_Angeles': 'GMT-08:00 America/Los_Angeles (PST/PDT)',
-    'America/New_York': 'GMT-05:00 America/New_York (EST/EDT)',
-    'America/Chicago': 'GMT-06:00 America/Chicago (CST/CDT)',
-    'America/Denver': 'GMT-07:00 America/Denver (MST/MDT)',
-    'Europe/London': 'GMT+00:00 Europe/London (GMT)',
-    'Europe/Paris': 'GMT+01:00 Europe/Paris (CET)',
-    'Asia/Tokyo': 'GMT+09:00 Asia/Tokyo (JST)',
-    'Asia/Shanghai': 'GMT+08:00 Asia/Shanghai (CST)',
-    'Asia/Kolkata': 'GMT+05:30 Asia/Kolkata (IST)',
-  };
-  return timezoneMap[timezone] || timezone;
+  try {
+    // Create a sample date to get the timezone offset
+    const now = new Date();
+    const utc = new Date(now.getTime() + (now.getTimezoneOffset() * 60000));
+    const localTime = new Date(utc.toLocaleString('en-US', { timeZone: timezone }));
+    const offset = (localTime.getTime() - utc.getTime()) / (1000 * 60 * 60);
+
+    // Format offset
+    const sign = offset >= 0 ? '+' : '-';
+    const absOffset = Math.abs(offset);
+    const hours = Math.floor(absOffset);
+    const minutes = (absOffset - hours) * 60;
+    const offsetStr = `GMT${sign}${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+
+    // Get abbreviated timezone name
+    const abbreviation = new Intl.DateTimeFormat('en', {
+      timeZone: timezone,
+      timeZoneName: 'short',
+    }).formatToParts(now).find(part => part.type === 'timeZoneName')?.value || '';
+
+    // Format: GMT+05:30 Asia/Kolkata (IST)
+    return `${offsetStr} ${timezone} ${abbreviation ? `(${abbreviation})` : ''}`.trim();
+  } catch (error) {
+    console.warn('Error formatting timezone display:', error);
+
+    // Fallback to predefined mapping
+    const timezoneMap = {
+      'America/Los_Angeles': 'GMT-08:00 America/Los_Angeles (PST/PDT)',
+      'America/New_York': 'GMT-05:00 America/New_York (EST/EDT)',
+      'America/Chicago': 'GMT-06:00 America/Chicago (CST/CDT)',
+      'America/Denver': 'GMT-07:00 America/Denver (MST/MDT)',
+      'Europe/London': 'GMT+00:00 Europe/London (GMT)',
+      'Europe/Paris': 'GMT+01:00 Europe/Paris (CET)',
+      'Asia/Tokyo': 'GMT+09:00 Asia/Tokyo (JST)',
+      'Asia/Shanghai': 'GMT+08:00 Asia/Shanghai (CST)',
+      'Asia/Kolkata': 'GMT+05:30 Asia/Kolkata (IST)',
+    };
+    return timezoneMap[timezone] || timezone;
+  }
 };

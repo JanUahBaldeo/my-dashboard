@@ -39,7 +39,7 @@ const MarketingSection = () => {
   return (
     <section className="w-full">
       {/* Top Row: Metrics + Purpose Block */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {/* Metric Cards - All same size */}
         {metrics.map((metric, i) => (
           <motion.div

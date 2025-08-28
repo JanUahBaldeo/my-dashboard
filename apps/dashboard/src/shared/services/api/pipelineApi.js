@@ -8,6 +8,9 @@ import { API_CONFIG, PIPELINE_CONFIG } from '@config/environment';
 const { LEAD_CONNECTOR: LC } = API_CONFIG;
 const { STAGES: PIPELINE_STAGES, STAGE_TAGS } = PIPELINE_CONFIG;
 
+// Override location ID to ensure we use the correct one
+const CORRECT_LOCATION_ID = 'b7vHWUGVUNQGoIlAXabY';
+
 // ---- HTTP helpers ------------------------------------------------------
 const ghHeaders = () => ({
   Accept: 'application/json',
@@ -23,15 +26,31 @@ const ghUrl = (path, params = {}) => {
   return url.toString();
 };
 
-const fetchJSON = async (input, init) => {
-  const res = await fetch(input, init);
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`HTTP ${res.status} ${res.statusText}${text ? ` - ${text}` : ''}`);
+const fetchJSON = async (url, options) => {
+  try {
+    const res = await fetch(url, options);
+    const data = await res.json();
+
+    if (!res.ok) {
+      console.error('❌ API Error Response:', {
+        status: res.status,
+        statusText: res.statusText,
+        url: url,
+        responseData: data,
+      });
+      throw new Error(`${res.status}: ${data.message || res.statusText || 'Unknown error'}`);
+    }
+
+    return data;
+  } catch (e) {
+    if (e.message.includes('403')) {
+      console.error('❌ 403 Forbidden - Check location ID and token:', {
+        locationId: CORRECT_LOCATION_ID,
+        url: url,
+      });
+    }
+    throw e;
   }
-  // Some endpoints return raw arrays, some wrap in objects
-  const data = await res.json().catch(() => ({}));
-  return data;
 };
 
 // ---- Tags --------------------------------------------------------------
@@ -46,7 +65,7 @@ const fetchAllContacts = async () => {
   const maxPages = 20; // safety cap
 
   while (page <= maxPages) {
-    const url = ghUrl('/contacts/', { locationId: LC.locationId, limit: pageSize, page: page > 1 ? page : undefined });
+    const url = ghUrl('/contacts/', { locationId: CORRECT_LOCATION_ID, limit: pageSize, page: page > 1 ? page : undefined });
     try {
       const data = await fetchJSON(url, { method: 'GET', headers: ghHeaders() });
       const pageContacts = Array.isArray(data)
@@ -100,7 +119,7 @@ export const fetchPipelineMetrics = async () => {
 
 export const fetchLeadsByStage = async (stageName) => {
   try {
-    const url = ghUrl('/contacts/', { locationId: LC.locationId });
+    const url = ghUrl('/contacts/', { locationId: CORRECT_LOCATION_ID });
     const data = await fetchJSON(url, { method: 'GET', headers: ghHeaders() });
     const list = data.contacts || data || [];
     const stageLeads = list.filter((lead) => {
@@ -168,7 +187,7 @@ export const addTagsToLead = async (leadId, tags) => {
   try {
     if (!leadId || !tags?.length) throw new Error('Lead ID and tags are required');
     const cleaned = cleanTags(tags);
-    const url = ghUrl(`/contacts/${leadId}`, { locationId: LC.locationId });
+    const url = ghUrl(`/contacts/${leadId}`, { locationId: CORRECT_LOCATION_ID });
     await fetchJSON(url, {
       method: 'PUT',
       headers: { ...ghHeaders(), 'Content-Type': 'application/json' },
@@ -188,7 +207,7 @@ export const moveLeadToStage = async (leadId, newStage) => {
     const id = leadId.includes('-') ? leadId.split('-')[0] : leadId;
 
     // Fetch contact
-    const getUrl = ghUrl(`/contacts/${id}`, { locationId: LC.locationId });
+    const getUrl = ghUrl(`/contacts/${id}`, { locationId: CORRECT_LOCATION_ID });
     const contactData = await fetchJSON(getUrl, { method: 'GET', headers: ghHeaders() });
     const contact = contactData.contact || contactData || {};
 
@@ -229,7 +248,7 @@ export const moveLeadToStage = async (leadId, newStage) => {
       customFields: [{ key: 'stage', field_value: stageName }],
     };
 
-    const putUrl = ghUrl(`/contacts/${id}`, { locationId: LC.locationId });
+    const putUrl = ghUrl(`/contacts/${id}`, { locationId: CORRECT_LOCATION_ID });
     const response = await fetchJSON(putUrl, {
       method: 'PUT',
       headers: { ...ghHeaders(), 'Content-Type': 'application/json' },
@@ -258,7 +277,7 @@ export const updateLeadDetails = async (leadId, updates) => {
       customField: { ...updates, updatedAt: new Date().toISOString() },
     };
 
-    const url = ghUrl(`/contacts/${leadId}`, { locationId: LC.locationId });
+    const url = ghUrl(`/contacts/${leadId}`, { locationId: CORRECT_LOCATION_ID });
     await fetchJSON(url, {
       method: 'PUT',
       headers: { ...ghHeaders(), 'Content-Type': 'application/json' },
@@ -276,7 +295,7 @@ export const updateLeadDetails = async (leadId, updates) => {
 export const deleteLead = async (leadId) => {
   try {
     if (!leadId) throw new Error('Lead ID is required');
-    const url = ghUrl(`/contacts/${leadId}`, { locationId: LC.locationId });
+    const url = ghUrl(`/contacts/${leadId}`, { locationId: CORRECT_LOCATION_ID });
     await fetchJSON(url, { method: 'DELETE', headers: ghHeaders() });
     toast.success('Lead deleted successfully');
     return { success: true, data: { leadId } };
@@ -302,13 +321,29 @@ export const setupRealtimeUpdates = () => () => {};
 // ---- Tests (quiet) -----------------------------------------------------
 export const testApiConnection = async () => {
   try {
-    const url = ghUrl('/contacts/', { locationId: LC.locationId, page: 1, limit: 1 });
-    const data = await fetchJSON(url, { method: 'GET', headers: ghHeaders() });
+    console.warn('🔍 Testing API with Location ID:', CORRECT_LOCATION_ID);
+    console.warn('🔍 Base URL:', LC.baseUrl);
+    console.warn('🔍 Token (first 20 chars):', LC.token ? LC.token.substring(0, 20) + '...' : 'NO TOKEN');
+
+    const url = ghUrl('/contacts/', { locationId: CORRECT_LOCATION_ID, page: 1, limit: 1 });
+    console.warn('🔍 Full URL:', url);
+
+    const headers = ghHeaders();
+    console.warn('🔍 Headers:', headers);
+
+    const data = await fetchJSON(url, { method: 'GET', headers });
+    console.warn('✅ API Connection Success');
     return { success: true, data };
   } catch (e) {
+    console.error('❌ API Connection Failed:', e.message);
     return { success: false, error: e.message };
   }
 };
+
+// Test function accessible from window for debugging
+if (typeof window !== 'undefined') {
+  window.testPipelineAPI = testApiConnection;
+}
 
 export const testContactsExist = async () => {
   try {
@@ -325,7 +360,7 @@ export const testContactsExist = async () => {
 
 export const testPagination = async () => {
   try {
-    const page1 = await fetchJSON(ghUrl('/contacts/', { locationId: LC.locationId, page: 1, limit: 10 }), {
+    const page1 = await fetchJSON(ghUrl('/contacts/', { locationId: CORRECT_LOCATION_ID, page: 1, limit: 10 }), {
       method: 'GET',
       headers: ghHeaders(),
     });
@@ -333,7 +368,7 @@ export const testPagination = async () => {
 
     let page2Count = 0;
     if (list1.length === 10) {
-      const page2 = await fetchJSON(ghUrl('/contacts/', { locationId: LC.locationId, page: 2, limit: 10 }), {
+      const page2 = await fetchJSON(ghUrl('/contacts/', { locationId: CORRECT_LOCATION_ID, page: 2, limit: 10 }), {
         method: 'GET',
         headers: ghHeaders(),
       });

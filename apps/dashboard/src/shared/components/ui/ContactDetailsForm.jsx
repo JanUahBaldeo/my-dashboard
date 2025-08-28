@@ -257,7 +257,7 @@ const ContactDetailsForm = memo(function ContactDetailsForm({
                           onChange={(e) => setField('firstName', e.target.value)}
                           readOnly={isView}
                           className={`${fnClass}`}
-                          placeholder="Colton"
+                          placeholder="First Name"
                         />
                       </div>
                       {errors.firstName && <p className="text-red-600 text-sm font-medium">{errors.firstName}</p>}
@@ -275,7 +275,7 @@ const ContactDetailsForm = memo(function ContactDetailsForm({
                           onChange={(e) => setField('lastName', e.target.value)}
                           readOnly={isView}
                           className={`${lnClass}`}
-                          placeholder="Quade"
+                          placeholder="Last Name"
                         />
                       </div>
                       {errors.lastName && <p className="text-red-600 text-sm font-medium">{errors.lastName}</p>}
@@ -295,7 +295,7 @@ const ContactDetailsForm = memo(function ContactDetailsForm({
                         onChange={(e) => setField('email', e.target.value)}
                         readOnly={isView}
                         className={`${emailClass}`}
-                        placeholder="cocoq57@gmail.com"
+                        placeholder="Email Address"
                       />
                     </div>
                     {errors.email && <p className="text-red-600 text-sm font-medium">{errors.email}</p>}

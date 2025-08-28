@@ -9,6 +9,68 @@ import { createLogger } from '@utils/logger';
 
 const utils = createLogger('FreeSlotsUtils');
 
+// ---------- helpers ----------
+function isBoxedString(v) {
+  return v && typeof v === 'object' && Object.prototype.toString.call(v) === '[object String]';
+}
+
+function toPrimitiveString(v) {
+  if (typeof v === 'string') return v;
+  if (isBoxedString(v)) return v.valueOf();
+
+  // Handle the specific GHL API issue where strings come back as character-indexed objects
+  // Example: {"0":"2","1":"0","2":"2","3":"5",...} should become "2025..."
+  if (v && typeof v === 'object' && v !== null) {
+    const keys = Object.keys(v);
+    const isCharacterIndexed = keys.every(key => /^\d+$/.test(key));
+
+    if (isCharacterIndexed && keys.length > 0) {
+      // Sort keys numerically and reconstruct the string
+      const sortedKeys = keys.sort((a, b) => parseInt(a) - parseInt(b));
+      const reconstructedString = sortedKeys.map(key => v[key]).join('');
+      console.warn('🔧 Reconstructed slot string from character indices:', reconstructedString);
+      return reconstructedString;
+    }
+
+    // Handle array-like objects with length property
+    if (typeof v.length === 'number') {
+      try {
+        return Array.from(v).join('');
+      } catch (e) {
+        // Failed to convert array-like object
+        console.warn('Failed to convert array-like object:', e);
+      }
+    }
+
+    // Handle slot objects that have a 'slot' property containing the actual time string
+    if (v.slot && typeof v.slot === 'string') {
+      return v.slot;
+    }
+  }
+
+  return v;
+}
+
+function parseSlotString(s, baseDate = new Date()) {
+  // Try native first (handles ISO)
+  const native = new Date(s);
+  if (!Number.isNaN(native.getTime())) return native;
+
+  // Support "h:mm am/pm"
+  const m = String(s).trim().match(/^(\d{1,2}):(\d{2})\s*(am|pm)$/i);
+  if (m) {
+    let hour = parseInt(m[1], 10) % 12;
+    if (/pm/i.test(m[3])) hour += 12;
+    const mins = parseInt(m[2], 10);
+    const d = new Date(baseDate);
+    d.setHours(hour, mins, 0, 0);
+    return d;
+  }
+
+  // Last resort (may be invalid)
+  return new Date(s);
+}
+
 /**
  * 🔧 Generate mock time slots for fallback when API fails or calendar has no availability
  * Creates realistic time slots in the specified timezone
@@ -32,7 +94,6 @@ export function generateMockSlots(date, timezone = 'America/Los_Angeles', slotDu
     endHour,
   });
 
-  // Generate slots from startHour to endHour, every slotDuration minutes
   for (let hour = startHour; hour < endHour; hour++) {
     for (let minute = 0; minute < 60; minute += slotDuration) {
       const startTime = new Date(selectedDate);
@@ -84,89 +145,88 @@ export function convertSlotsToTimeSlots(slots, timezone = null) {
     slotStructure: slots[0] ? Object.keys(slots[0]) : 'N/A',
   });
 
-  const timeSlots = slots.map((slot, index) => {
-    try {
-      // Handle different slot formats from GHL API
-      let startTime, endTime;
+  const timeSlots = slots
+    .map((rawSlot, index) => {
+      try {
+        let startTime, endTime;
 
-      console.warn('🔍 Processing slot:', { index, slot, type: typeof slot });
+        console.warn('🔍 Processing slot:', { index, slot: rawSlot, type: typeof rawSlot });
 
-      if (typeof slot === 'string') {
-        // If slot is already a string (like "2024-08-15T14:00:00"), treat as start time
-        startTime = new Date(slot);
-        // Assume 30-minute duration if not specified
-        endTime = new Date(startTime.getTime() + 30 * 60 * 1000);
-        console.warn('📅 String slot processed:', { slot, startTime: startTime.toISOString(), endTime: endTime.toISOString() });
-      } else if (typeof slot === 'object' && slot !== null) {
-        console.warn('🔍 Object slot keys:', Object.keys(slot));
+        // Handle the new normalized slot format with ISO datetime strings
+        if (typeof rawSlot === 'object' && rawSlot !== null) {
+          if (rawSlot.slot && typeof rawSlot.slot === 'string') {
+            // This is our normalized format: { slot: "2025-08-27T08:00:00-07:00", ... }
+            startTime = new Date(rawSlot.slot);
+            endTime = new Date(startTime.getTime() + 30 * 60 * 1000); // Default 30-minute duration
 
-        // Handle object format with startTime/endTime properties
-        if (slot.startTime) {
-          startTime = new Date(slot.startTime);
-        } else if (slot.start) {
-          startTime = new Date(slot.start);
-        } else if (slot.time) {
-          startTime = new Date(slot.time);
+            console.warn('📅 Normalized slot processed:', {
+              slot: rawSlot.slot,
+              startTime: isNaN(startTime) ? 'Invalid' : startTime.toISOString(),
+              endTime: isNaN(endTime) ? 'Invalid' : endTime.toISOString(),
+            });
+          } else if (rawSlot.startTime) {
+            // Standard slot object format
+            startTime = new Date(rawSlot.startTime);
+            if (rawSlot.endTime) {
+              endTime = new Date(rawSlot.endTime);
+            } else {
+              endTime = new Date(startTime.getTime() + 30 * 60 * 1000);
+            }
+          } else if (rawSlot.start) {
+            startTime = new Date(rawSlot.start);
+            endTime = rawSlot.end ? new Date(rawSlot.end) : new Date(startTime.getTime() + 30 * 60 * 1000);
+          } else if (rawSlot.time) {
+            startTime = parseSlotString(rawSlot.time);
+            endTime = new Date(startTime.getTime() + 30 * 60 * 1000);
+          } else {
+            utils.warn('Slot object missing time field', { slot: rawSlot, index, keys: Object.keys(rawSlot) });
+            return null;
+          }
+        } else if (typeof rawSlot === 'string') {
+          // Direct ISO datetime string
+          startTime = parseSlotString(rawSlot);
+          endTime = new Date(startTime.getTime() + 30 * 60 * 1000);
+
+          console.warn('📅 String slot processed:', {
+            slot: rawSlot,
+            startTime: isNaN(startTime) ? 'Invalid' : startTime.toISOString(),
+            endTime: isNaN(endTime) ? 'Invalid' : endTime.toISOString(),
+          });
         } else {
-          utils.warn('Slot object missing time field', { slot, index, keys: Object.keys(slot) });
+          // Try the old normalization approach for legacy formats
+          const normalized = toPrimitiveString(rawSlot);
+          startTime = parseSlotString(normalized);
+          endTime = new Date(startTime.getTime() + 30 * 60 * 1000);
+
+          console.warn('📅 Legacy normalization used:', {
+            original: rawSlot,
+            normalized,
+            startTime: isNaN(startTime) ? 'Invalid' : startTime.toISOString(),
+          });
+        }
+
+        if (isNaN(startTime.getTime()) || isNaN(endTime.getTime())) {
+          utils.warn('Invalid date in slot', { slot: rawSlot, index, startTime, endTime });
           return null;
         }
 
-        if (slot.endTime) {
-          endTime = new Date(slot.endTime);
-        } else if (slot.end) {
-          endTime = new Date(slot.end);
-        } else if (slot.duration) {
-          // Calculate end time from duration (assume minutes)
-          endTime = new Date(startTime.getTime() + (slot.duration * 60 * 1000));
-        } else {
-          // Default to 30 minutes if no end time or duration
-          endTime = new Date(startTime.getTime() + 30 * 60 * 1000);
-        }
+        const formatOptions = {
+          hour: 'numeric',
+          minute: '2-digit',
+          hour12: true,
+        };
+        if (timezone) formatOptions.timeZone = timezone;
 
-        console.warn('📅 Object slot processed:', {
-          startTime: startTime.toISOString(),
-          endTime: endTime.toISOString(),
-          originalStart: slot.startTime || slot.start || slot.time,
-          originalEnd: slot.endTime || slot.end || slot.duration,
-        });
-      } else {
-        utils.warn('Unsupported slot format', { slot, type: typeof slot, index });
+        const startLower = startTime.toLocaleTimeString('en-US', formatOptions).toLowerCase();
+        const endLower = endTime.toLocaleTimeString('en-US', formatOptions).toLowerCase();
+
+        return `${startLower} - ${endLower}`;
+      } catch (error) {
+        utils.warn('Error formatting slot', { slot: rawSlot, error: error.message, index });
         return null;
       }
-
-      // Validate dates
-      if (isNaN(startTime.getTime()) || isNaN(endTime.getTime())) {
-        utils.warn('Invalid date in slot', { slot, index, startTime, endTime });
-        return null;
-      }
-
-      // Format time to match GHL backend exactly: "2:00 pm - 2:30 pm"
-      const formatOptions = {
-        hour: 'numeric',
-        minute: '2-digit',
-        hour12: true,
-      };
-
-      if (timezone) {
-        formatOptions.timeZone = timezone;
-      }
-
-      const startFormatted = startTime.toLocaleTimeString('en-US', formatOptions);
-      const endFormatted = endTime.toLocaleTimeString('en-US', formatOptions);
-
-      // Convert to lowercase to match GHL format: "2:00 PM" -> "2:00 pm"
-      const startLower = startFormatted.toLowerCase();
-      const endLower = endFormatted.toLowerCase();
-
-      // Return in exact GHL format: "2:00 pm - 2:30 pm"
-      return `${startLower} - ${endLower}`;
-
-    } catch (error) {
-      utils.warn('Error formatting slot', { slot, error: error.message, index });
-      return null;
-    }
-  }).filter(Boolean); // Remove any null values
+    })
+    .filter(Boolean);
 
   utils.success('Slots converted successfully', {
     inputCount: slots.length,
@@ -199,7 +259,6 @@ export function validateCalendarId(calendarId) {
     };
   }
 
-  // Check for obvious invalid patterns
   if (calendarId.includes(' ')) {
     return {
       isValid: false,
@@ -221,7 +280,6 @@ export function validateCalendarId(calendarId) {
     };
   }
 
-  // Check for basic alphanumeric format (GHL typically uses alphanumeric IDs)
   if (!/^[a-zA-Z0-9]+$/.test(calendarId)) {
     return {
       isValid: false,
@@ -287,47 +345,43 @@ export function createFreeSlotsErrorMessage(error, _calendarId) {
  * @param {string} params.calendarId - Current calendar ID
  * @param {string} params.date - Current date
  * @param {string} [params.userId] - Current user ID
+ * @param {string} [params.timezone] - Current timezone
  * @param {string} [params.lastCalendarId] - Previous calendar ID
  * @param {string} [params.lastDate] - Previous date
  * @param {string} [params.lastUserId] - Previous user ID
+ * @param {string} [params.lastTimezone] - Previous timezone
  * @returns {boolean} - Whether slots should be refreshed
  */
 export function shouldRefreshSlots({
   calendarId,
   date,
   userId = null,
+  timezone = null,
   lastCalendarId = null,
   lastDate = null,
   lastUserId = null,
+  lastTimezone = null,
 }) {
-  // Always refresh if calendar changed
   if (calendarId !== lastCalendarId) {
-    utils.info('Slots refresh needed: calendar changed', {
-      from: lastCalendarId,
-      to: calendarId,
-    });
+    utils.info('Slots refresh needed: calendar changed', { from: lastCalendarId, to: calendarId });
     return true;
   }
 
-  // Always refresh if date changed
   if (date !== lastDate) {
-    utils.info('Slots refresh needed: date changed', {
-      from: lastDate,
-      to: date,
-    });
+    utils.info('Slots refresh needed: date changed', { from: lastDate, to: date });
     return true;
   }
 
-  // Refresh if user changed (affects availability)
   if (userId !== lastUserId) {
-    utils.info('Slots refresh needed: user changed', {
-      from: lastUserId,
-      to: userId,
-    });
+    utils.info('Slots refresh needed: user changed', { from: lastUserId, to: userId });
     return true;
   }
 
-  // No refresh needed
+  if (timezone !== lastTimezone) {
+    utils.info('Slots refresh needed: timezone changed', { from: lastTimezone, to: timezone });
+    return true;
+  }
+
   return false;
 }
 

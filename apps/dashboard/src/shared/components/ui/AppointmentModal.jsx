@@ -4,30 +4,25 @@ import { toast } from 'react-hot-toast';
 import {
   FiCalendar,
   FiClock,
-  FiUser,
-  FiMapPin,
   FiX,
   FiPlus,
   FiSearch,
   FiCheck,
   FiChevronDown,
-  FiRefreshCw,
   FiAlertTriangle,
 } from 'react-icons/fi';
 
 import ContactDropdown from './ContactDropdown';
-import CalendarDatePicker from './CalendarDatePicker';
-
 import { fetchUsers } from '@api/userApi';
 import { useGHLIntegration } from '@shared/hooks';
 import { createBlockSlot } from '@shared/services/api/ghlCalendarService';
 import { fetchFreeSlotsForDate } from '@shared/services/api/freeSlotsApi';
 import {
-  getCurrentTimezone,
-  initializeTimezone,
-  getTimezoneOptions as getGHLTimezoneOptions,
-} from '@shared/services/timezoneService';
-
+  getCalendarTimezone,
+  updateCalendarTimezoneCache,
+  clearCalendarTimezoneCache,
+} from '@shared/services/calendarTimezoneService';
+import EnhancedTimezoneDropdown from './EnhancedTimezoneDropdown';
 import {
   generateMockSlots,
   convertSlotsToTimeSlots,
@@ -35,7 +30,6 @@ import {
   createFreeSlotsErrorMessage,
   shouldRefreshSlots,
 } from '@shared/utils/freeSlotsUtils';
-
 import { getGhlCalendarList } from '@api/calendarApi';
 
 const AppointmentModal = ({ isOpen, onClose, selectedDate = null, mode = 'create' }) => {
@@ -46,11 +40,9 @@ const AppointmentModal = ({ isOpen, onClose, selectedDate = null, mode = 'create
   const [rawCalendarData, setRawCalendarData] = useState([]);
   const [calendarSearch, setCalendarSearch] = useState('');
   const [isCalendarDropdownOpen, setIsCalendarDropdownOpen] = useState(false);
-  const [timezoneOptions, setTimezoneOptions] = useState([]);
 
   // Tabs & Form
   const [activeTab, setActiveTab] = useState('appointment');
-  // [FORM_DEFAULTS]
   const [form, setForm] = useState({
     calendar: '',
     title: '',
@@ -71,117 +63,114 @@ const AppointmentModal = ({ isOpen, onClose, selectedDate = null, mode = 'create
     userCalendar: 'Joel Morgan',
     startTime: new Date().toISOString().slice(0, 16),
     endTime: new Date(Date.now() + 30 * 60 * 1000).toISOString().slice(0, 16),
-
-    // ⬇️ NEW
     locationType: 'custom',
     location: '',
   });
 
-
   const [showDescription, setShowDescription] = useState(false);
-  const [showRecurrence, setShowRecurrence] = useState(false);
-  const [showDatePicker, setShowDatePicker] = useState(false);
   const [newNote, setNewNote] = useState('');
-
-  // Status
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errors, setErrors] = useState({});
 
-  // Free Slots
+  // Slots state
   const [availableSlots, setAvailableSlots] = useState([]);
   const [isLoadingSlots, setIsLoadingSlots] = useState(false);
   const [slotsError, setSlotsError] = useState(null);
-  const [lastFetchParams, setLastFetchParams] = useState({ calendarId: null, date: null, userId: null });
+  const [slotsVersion, setSlotsVersion] = useState(0);
+  const [lastFetchParams, setLastFetchParams] = useState({
+    calendarId: null,
+    date: null,
+    userId: null,
+    timezone: null,
+  });
 
-  // Timezone (per calendar/user)
+  // Timezone state
   const [ghlTimezone, setGhlTimezone] = useState(null);
   const [isLoadingTimezone, setIsLoadingTimezone] = useState(false);
   const [timezoneCache, setTimezoneCache] = useState(new Map());
 
-  // Users
+  // Users state
   const [users, setUsers] = useState([]);
   const [isLoadingUsers, setIsLoadingUsers] = useState(false);
 
+  // Refs
   const titleInputRef = useRef(null);
   const dateInputRef = useRef(null);
 
-  // Static slot presets
-  const timeSlots = useMemo(
-    () => ({
-      '15min': [
-        '8:00 am - 8:15 am',
-        '8:15 am - 8:30 am',
-        '8:30 am - 8:45 am',
-        '8:45 am - 9:00 am',
-        '9:00 am - 9:15 am',
-        '9:15 am - 9:30 am',
-        '9:30 am - 9:45 am',
-        '9:45 am - 10:00 am',
-        '10:00 am - 10:15 am',
-        '10:15 am - 10:30 am',
-        '10:30 am - 10:45 am',
-        '10:45 am - 11:00 am',
-        '11:00 am - 11:15 am',
-        '11:15 am - 11:30 am',
-        '11:30 am - 11:45 am',
-        '11:45 am - 12:00 pm',
-        '1:00 pm - 1:15 pm',
-        '1:15 pm - 1:30 pm',
-        '1:30 pm - 1:45 pm',
-        '1:45 pm - 2:00 pm',
-        '2:00 pm - 2:15 pm',
-        '2:15 pm - 2:30 pm',
-        '2:30 pm - 2:45 pm',
-        '2:45 pm - 3:00 pm',
-        '3:00 pm - 3:15 pm',
-        '3:15 pm - 3:30 pm',
-        '3:30 pm - 3:45 pm',
-        '3:45 pm - 4:00 pm',
-        '4:00 pm - 4:15 pm',
-        '4:15 pm - 4:30 pm',
-        '4:30 pm - 4:45 pm',
-        '4:45 pm - 5:00 pm',
-      ],
-      '30min': [
-        '8:00 am - 8:30 am',
-        '8:30 am - 9:00 am',
-        '9:00 am - 9:30 am',
-        '9:30 am - 10:00 am',
-        '10:00 am - 10:30 am',
-        '10:30 am - 11:00 am',
-        '11:00 am - 11:30 am',
-        '11:30 am - 12:00 pm',
-        '1:00 pm - 1:30 pm',
-        '1:30 pm - 2:00 pm',
-        '2:00 pm - 2:30 pm',
-        '2:30 pm - 3:00 pm',
-        '3:00 pm - 3:30 pm',
-        '3:30 pm - 4:00 pm',
-        '4:00 pm - 4:30 pm',
-        '4:30 pm - 5:00 pm',
-      ],
-      '60min': [
-        '8:00 am - 9:00 am',
-        '9:00 am - 10:00 am',
-        '10:00 am - 11:00 am',
-        '11:00 am - 12:00 pm',
-        '1:00 pm - 2:00 pm',
-        '2:00 pm - 3:00 pm',
-        '3:00 pm - 4:00 pm',
-        '4:00 pm - 5:00 pm',
-      ],
-      '90min': [
-        '8:00 am - 9:30 am',
-        '9:30 am - 11:00 am',
-        '11:00 am - 12:30 pm',
-        '1:00 pm - 2:30 pm',
-        '2:30 pm - 4:00 pm',
-        '4:00 pm - 5:30 pm',
-      ],
-      '120min': ['8:00 am - 10:00 am', '10:00 am - 12:00 pm', '1:00 pm - 3:00 pm', '3:00 pm - 5:00 pm'],
-    }),
-    [],
-  );
+  // Static slot presets (wrapped in useMemo for dependency optimization)
+  const timeSlots = useMemo(() => ({
+    '15min': [
+      '8:00 am - 8:15 am',
+      '8:15 am - 8:30 am',
+      '8:30 am - 8:45 am',
+      '8:45 am - 9:00 am',
+      '9:00 am - 9:15 am',
+      '9:15 am - 9:30 am',
+      '9:30 am - 9:45 am',
+      '9:45 am - 10:00 am',
+      '10:00 am - 10:15 am',
+      '10:15 am - 10:30 am',
+      '10:30 am - 10:45 am',
+      '10:45 am - 11:00 am',
+      '11:00 am - 11:15 am',
+      '11:15 am - 11:30 am',
+      '11:30 am - 11:45 am',
+      '11:45 am - 12:00 pm',
+      '1:00 pm - 1:15 pm',
+      '1:15 pm - 1:30 pm',
+      '1:30 pm - 1:45 pm',
+      '1:45 pm - 2:00 pm',
+      '2:00 pm - 2:15 pm',
+      '2:15 pm - 2:30 pm',
+      '2:30 pm - 2:45 pm',
+      '2:45 pm - 3:00 pm',
+      '3:00 pm - 3:15 pm',
+      '3:15 pm - 3:30 pm',
+      '3:30 pm - 3:45 pm',
+      '3:45 pm - 4:00 pm',
+      '4:00 pm - 4:15 pm',
+      '4:15 pm - 4:30 pm',
+      '4:30 pm - 4:45 pm',
+      '4:45 pm - 5:00 pm',
+    ],
+    '30min': [
+      '8:00 am - 8:30 am',
+      '8:30 am - 9:00 am',
+      '9:00 am - 9:30 am',
+      '9:30 am - 10:00 am',
+      '10:00 am - 10:30 am',
+      '10:30 am - 11:00 am',
+      '11:00 am - 11:30 am',
+      '11:30 am - 12:00 pm',
+      '1:00 pm - 1:30 pm',
+      '1:30 pm - 2:00 pm',
+      '2:00 pm - 2:30 pm',
+      '2:30 pm - 3:00 pm',
+      '3:00 pm - 3:30 pm',
+      '3:30 pm - 4:00 pm',
+      '4:00 pm - 4:30 pm',
+      '4:30 pm - 5:00 pm',
+    ],
+    '60min': [
+      '8:00 am - 9:00 am',
+      '9:00 am - 10:00 am',
+      '10:00 am - 11:00 am',
+      '11:00 am - 12:00 pm',
+      '1:00 pm - 2:00 pm',
+      '2:00 pm - 3:00 pm',
+      '3:00 pm - 4:00 pm',
+      '4:00 pm - 5:00 pm',
+    ],
+    '90min': [
+      '8:00 am - 9:30 am',
+      '9:30 am - 11:00 am',
+      '11:00 am - 12:30 pm',
+      '1:00 pm - 2:30 pm',
+      '2:30 pm - 4:00 pm',
+      '4:00 pm - 5:30 pm',
+    ],
+    '120min': ['8:00 am - 10:00 am', '10:00 am - 12:00 pm', '1:00 pm - 3:00 pm', '3:00 pm - 5:00 pm'],
+  }), []);
 
   // Utilities
   const convertToISOString = (date, time) => {
@@ -196,34 +185,31 @@ const AppointmentModal = ({ isOpen, onClose, selectedDate = null, mode = 'create
     return dateTime.toISOString();
   };
 
-  // >>> NEW CODE START: recurrence helpers
-const weekdayNames = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
-const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  // >>> Recurrence helpers (no useMemo)
+  const weekdayNames = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
-const ordinal = (n) => {
-  const s = ['th','st','nd','rd'], v = n % 100;
-  return n + (s[(v-20)%10] || s[v] || s[0]);
-};
+  const ordinal = (n) => {
+    const s = ['th','st','nd','rd'], v = n % 100;
+    return n + (s[(v-20)%10] || s[v] || s[0]);
+  };
 
-const nthOfMonth = (dateObj) => {
-  // 3rd Thursday, etc.
-  const d = new Date(dateObj);
-  const day = d.getDate();
-  return Math.ceil(day / 7);
-};
+  const nthOfMonth = (dateObj) => {
+    const d = new Date(dateObj);
+    const day = d.getDate();
+    return Math.ceil(day / 7);
+  };
 
-const recurrenceOptions = useMemo(() => {
-  // base date from custom startTime if present, else from form.date
-  const base = form.slotType === 'custom'
-    ? (form.startTime ? new Date(form.startTime) : new Date())
-    : (form.date ? new Date(`${form.date}T00:00:00`) : new Date());
-
-  const wd = weekdayNames[base.getDay()];                     // Thursday
-  const nth = ordinal(nthOfMonth(base));                      // third
-  const mon = monthNames[base.getMonth()];                    // August
-  const mday = ordinal(base.getDate());                       // 21st
-
-  return [
+  // Compute recurrence options each render (cheap)
+  const baseForRecurrence =
+    form.slotType === 'custom'
+      ? (form.startTime ? new Date(form.startTime) : new Date())
+      : (form.date ? new Date(`${form.date}T00:00:00`) : new Date());
+  const wd = weekdayNames[baseForRecurrence.getDay()];
+  const nth = ordinal(nthOfMonth(baseForRecurrence));
+  const mon = monthNames[baseForRecurrence.getMonth()];
+  const mday = ordinal(baseForRecurrence.getDate());
+  const recurrenceOptions = [
     { value: 'daily', label: 'Daily' },
     { value: 'weekly_on_weekday', label: `Weekly on ${wd}` },
     { value: 'monthly_on_nth_weekday', label: `Monthly on ${nth} ${wd}` },
@@ -231,11 +217,7 @@ const recurrenceOptions = useMemo(() => {
     { value: 'every_weekday_mon_fri', label: 'Every Weekday (Mon to Fri)' },
     { value: 'custom', label: 'Custom' },
   ];
-}, [form.slotType, form.startTime, form.date]);
-// <<< NEW CODE END: recurrence helpers
 
-
-  // [RESET_FORM] — replace your whole resetForm with this
   const resetForm = () => {
     const defaultCalendar = calendarOptions.find((c) => c.isActive)?.value || '';
     setForm({
@@ -265,8 +247,17 @@ const recurrenceOptions = useMemo(() => {
     });
     setShowDescription(false);
     setNewNote('');
-  };
 
+    // Clear slots cache when form is reset
+    setAvailableSlots([]);
+    setSlotsError(null);
+    setLastFetchParams({
+      calendarId: null,
+      date: null,
+      userId: null,
+      timezone: null,
+    });
+  };
 
   const getFilteredCalendarOptions = useCallback(() => {
     if (!calendarSearch.trim()) return calendarOptions;
@@ -287,11 +278,18 @@ const recurrenceOptions = useMemo(() => {
 
       setIsLoadingTimezone(true);
       try {
-        await initializeTimezone();
-        const tz = getCurrentTimezone() || 'America/Los_Angeles';
-        setTimezoneCache((prev) => new Map(prev).set(cacheKey, tz));
-        return tz;
-      } catch (_e) {
+        const calendarTimezoneInfo = await getCalendarTimezone(calendarId);
+        const timezone = calendarTimezoneInfo.timezone;
+
+        // Update cache
+        setTimezoneCache((prev) => new Map(prev).set(cacheKey, timezone));
+
+        // Update the calendar timezone cache as well
+        updateCalendarTimezoneCache(calendarId, timezone);
+
+        return timezone;
+      } catch (error) {
+        console.error('❌ Error fetching calendar timezone:', error.message);
         const fallback = 'America/Los_Angeles';
         setTimezoneCache((prev) => new Map(prev).set(cacheKey, fallback));
         return fallback;
@@ -304,6 +302,9 @@ const recurrenceOptions = useMemo(() => {
 
   const fetchEnhancedCalendarList = useCallback(async () => {
     try {
+      clearCalendarTimezoneCache();
+      setTimezoneCache(new Map());
+
       const response = await getGhlCalendarList();
       if (!response?.success || !response?.data) throw new Error('Failed to fetch calendars');
       const calendarsRaw = response.data.calendars || response.data || [];
@@ -392,50 +393,80 @@ const recurrenceOptions = useMemo(() => {
           calendarId,
           date,
           userId,
+          timezone: ghlTimezone,
           lastCalendarId: lastFetchParams.calendarId,
           lastDate: lastFetchParams.date,
           lastUserId: lastFetchParams.userId,
+          lastTimezone: lastFetchParams.timezone,
         })
       ) {
         return;
       }
+
       if (!calendarId || !date) {
-        setSlotsError('Calendar and date are required to fetch available slots');
-        return;
-      }
-      const validation = validateCalendarId(calendarId);
-      if (!validation.isValid) {
-        setSlotsError(`Invalid calendar: ${validation.message}`);
+        const errorMsg = 'Calendar and date are required to fetch available slots';
+        console.error('❌ Validation failed:', errorMsg);
+        setSlotsError(errorMsg);
+        setAvailableSlots([]);
         return;
       }
 
+      const validation = validateCalendarId(calendarId);
+      if (!validation.isValid) {
+        const errorMsg = `Invalid calendar: ${validation.message}`;
+        console.error('❌ Calendar validation failed:', errorMsg);
+        setSlotsError(errorMsg);
+        setAvailableSlots([]);
+        return;
+      }
+
+      console.warn('🚀 Starting to fetch slots from GHL API...');
       setIsLoadingSlots(true);
       setSlotsError(null);
+
+      // Clear existing slots before fetching new ones
       setAvailableSlots([]);
 
       try {
+        toast.loading('Fetching available slots...', { id: 'slots-fetch' });
+
         const response = await fetchFreeSlotsForDate(calendarId, date, ghlTimezone, userId);
+
         if (response?.success && Array.isArray(response.slots)) {
           if (response.slots.length > 0) {
             setAvailableSlots(response.slots);
+            setSlotsVersion(v => v + 1); // Force re-render
             setSlotsError(null);
+            toast.success(`Found ${response.slots.length} available slots`, { id: 'slots-fetch' });
+
+            // Reset timeSlot selection when new slots are loaded
+            setForm((p) => ({ ...p, timeSlot: '' }));
           } else {
             const mock = generateMockSlots(date, ghlTimezone || 'America/Los_Angeles');
             setAvailableSlots(mock);
+            setSlotsVersion(v => v + 1); // Force re-render
             setSlotsError('Calendar has no availability configured. Showing sample slots.');
+            toast.warning('No slots configured. Showing sample times.', { id: 'slots-fetch' });
           }
         } else {
           const errMsg = createFreeSlotsErrorMessage(
             new Error(response?.error || 'Unknown error'),
             calendarId,
           );
+          console.error('❌ API returned unsuccessful response:', response);
           setAvailableSlots(generateMockSlots(date, ghlTimezone || 'America/Los_Angeles'));
+          setSlotsVersion(v => v + 1); // Force re-render
           setSlotsError(errMsg);
+          toast.error('Using fallback slots due to API issue', { id: 'slots-fetch' });
         }
-        setLastFetchParams({ calendarId, date, userId });
+        setLastFetchParams({ calendarId, date, userId, timezone: ghlTimezone });
       } catch (e) {
-        setSlotsError(createFreeSlotsErrorMessage(e, calendarId));
+        console.error('❌ Error fetching slots:', e);
+        const errorMsg = createFreeSlotsErrorMessage(e, calendarId);
+        setSlotsError(errorMsg);
         setAvailableSlots(generateMockSlots(date, ghlTimezone || 'America/Los_Angeles'));
+        setSlotsVersion(v => v + 1); // Force re-render
+        toast.error(`Failed to fetch slots: ${e.message}`, { id: 'slots-fetch' });
       } finally {
         setIsLoadingSlots(false);
       }
@@ -451,6 +482,16 @@ const recurrenceOptions = useMemo(() => {
   // Effects
   useEffect(() => {
     if (isOpen && titleInputRef.current) titleInputRef.current.focus();
+
+    // Clear slots cache when modal opens to ensure fresh fetches
+    if (isOpen) {
+      setLastFetchParams({
+        calendarId: null,
+        date: null,
+        userId: null,
+        timezone: null,
+      });
+    }
   }, [isOpen]);
 
   useEffect(() => {
@@ -460,25 +501,9 @@ const recurrenceOptions = useMemo(() => {
   useEffect(() => {
     const load = async () => {
       await fetchEnhancedCalendarList();
-      try {
-        const tzOpts = await getGHLTimezoneOptions();
-        if (Array.isArray(tzOpts) && tzOpts.length) setTimezoneOptions(tzOpts);
-      } catch (_e) {
-        setTimezoneOptions([
-          { value: 'America/Los_Angeles', label: 'GMT-08:00 America/Los_Angeles (PST/PDT)' },
-          { value: 'America/Chicago', label: 'GMT-06:00 America/Chicago (CST/CDT)' },
-          { value: 'America/New_York', label: 'GMT-05:00 America/New_York (EST/EDT)' },
-          { value: 'America/Denver', label: 'GMT-07:00 America/Denver (MST/MDT)' },
-          { value: 'Europe/London', label: 'GMT+00:00 Europe/London (GMT/BST)' },
-          { value: 'Europe/Paris', label: 'GMT+01:00 Europe/Paris (CET/CEST)' },
-          { value: 'Asia/Tokyo', label: 'GMT+09:00 Asia/Tokyo (JST)' },
-          { value: 'Asia/Shanghai', label: 'GMT+08:00 Asia/Shanghai (CST)' },
-          { value: 'Asia/Kolkata', label: 'GMT+05:30 Asia/Kolkata (IST)' },
-        ]);
-      }
     };
     if (isOpen) load();
-  }, [isOpen, fetchEnhancedCalendarList]);
+  }, [isOpen, fetchEnhancedCalendarList, form.timezone]);
 
   useEffect(() => {
     if (calendarOptions.length > 0) {
@@ -503,64 +528,117 @@ const recurrenceOptions = useMemo(() => {
     }
   }, [availableSlots.length, form.timeSlot, isLoadingSlots, getAvailableTimeSlots]);
 
+  // Handle timezone changes - refresh slots when timezone changes
+  useEffect(() => {
+    const handleTimezoneChange = async () => {
+      if (form.calendar && form.date && form.timezone && isOpen) {
+        setGhlTimezone(form.timezone);
+
+        // Refresh available slots with new timezone
+        if (!isLoadingSlots) {
+          setAvailableSlots([]);
+          setSlotsVersion(v => v + 1); // Force re-render
+          setSlotsError(null);
+
+          const selectedUser = users.find((u) => {
+            const nm = u.name || `${u.firstName || ''} ${u.lastName || ''}`.trim();
+            return nm === form.userCalendar;
+          });
+
+          await fetchAvailableSlots(form.calendar, form.date, selectedUser?.id || null);
+        }
+      }
+    };
+
+    if (isOpen && form.timezone) {
+      handleTimezoneChange();
+    }
+  }, [form.timezone, isOpen, fetchAvailableSlots, form.calendar, form.date, form.userCalendar, users, isLoadingSlots]);
+
+  // Single effect to handle calendar, date, and user changes
   useEffect(() => {
     const initialize = async () => {
-      if (isOpen && form.calendar && form.date && users.length >= 0 && !isLoadingSlots && !slotsError) {
+      if (
+        isOpen &&
+        form.calendar &&
+        form.date &&
+        users.length >= 0 &&
+        !isLoadingSlots &&
+        ghlTimezone
+      ) {
         const selectedUser = users.find((u) => {
           const nm = u.name || `${u.firstName || ''} ${u.lastName || ''}`.trim();
           return nm === form.userCalendar;
         });
         const userId = selectedUser?.id || null;
+
+        // Clear previous slots before fetching new ones
+        setAvailableSlots([]);
+        setSlotsVersion(v => v + 1); // Force re-render
+        setSlotsError(null);
+
         await fetchAvailableSlots(form.calendar, form.date, userId);
       }
     };
     initialize();
-  }, [isOpen, form.calendar, form.date, form.userCalendar, users, isLoadingSlots, slotsError, fetchAvailableSlots]);
+  }, [isOpen, form.calendar, form.date, form.userCalendar, users, ghlTimezone, isLoadingSlots, fetchAvailableSlots]);
 
-// Handlers
-const validateForm = () => {
-  const next = {};
+  // Handlers
+  const validateForm = () => {
+    const next = {};
 
-  if (!form.title.trim()) {
-    next.title = activeTab === 'appointment' ? 'Appointment title is required' : 'Title is required';
-  }
+    if (!form.title.trim()) {
+      next.title = activeTab === 'appointment' ? 'Appointment title is required' : 'Title is required';
+    }
 
-  if (activeTab === 'appointment') {
-    if (!form.contactId) next.contact = 'Please select a contact';
+    if (activeTab === 'appointment') {
+      if (!form.contactId) next.contact = 'Please select a contact';
 
-    if (form.slotType === 'custom') {
+      if (form.slotType === 'custom') {
+        if (!form.startTime) next.startTime = 'Start time is required';
+        if (!form.endTime) next.endTime = 'End time is required';
+        if (form.startTime && form.endTime && new Date(form.startTime) >= new Date(form.endTime)) {
+          next.endTime = 'End time must be after start time';
+        }
+      } else {
+        if (!form.date) next.date = 'Date is required';
+        if (!form.timeSlot) next.timeSlot = 'Please select a slot';
+      }
+    } else if (activeTab === 'blocked') {
       if (!form.startTime) next.startTime = 'Start time is required';
       if (!form.endTime) next.endTime = 'End time is required';
       if (form.startTime && form.endTime && new Date(form.startTime) >= new Date(form.endTime)) {
         next.endTime = 'End time must be after start time';
       }
-    } else {
-      if (!form.date) next.date = 'Date is required';
-      if (!form.timeSlot) next.timeSlot = 'Please select a slot';
     }
-  } else if (activeTab === 'blocked') {
-    if (!form.startTime) next.startTime = 'Start time is required';
-    if (!form.endTime) next.endTime = 'End time is required';
-    if (form.startTime && form.endTime && new Date(form.startTime) >= new Date(form.endTime)) {
-      next.endTime = 'End time must be after start time';
-    }
-  }
 
-  setErrors(next);
-  return Object.keys(next).length === 0;
-};
+    setErrors(next);
+    return Object.keys(next).length === 0;
+  };
 
   const handleCalendarChange = useCallback(
     async (newCalendarId) => {
-      setForm((p) => ({ ...p, calendar: newCalendarId }));
+      setForm((p) => ({ ...p, calendar: newCalendarId, timeSlot: '' }));
+
+      // Clear previous slots immediately
       setAvailableSlots([]);
+      setSlotsVersion(v => v + 1); // Force re-render
       setSlotsError(null);
+
       if (!newCalendarId || !form.date) return;
+
+      setIsLoadingSlots(true);
+
       const selectedUser = users.find((u) => {
         const nm = u.name || `${u.firstName || ''} ${u.lastName || ''}`.trim();
         return nm === form.userCalendar;
       });
-      await fetchAvailableSlots(newCalendarId, form.date, selectedUser?.id || null);
+
+      try {
+        await fetchAvailableSlots(newCalendarId, form.date, selectedUser?.id || null);
+      } catch (error) {
+        console.error('❌ Error fetching slots for calendar change:', error);
+      }
     },
     [form.date, form.userCalendar, users, fetchAvailableSlots],
   );
@@ -585,15 +663,25 @@ const validateForm = () => {
 
   const handleDateChange = useCallback(
     async (newDate) => {
-      setForm((p) => ({ ...p, date: newDate }));
+      setForm((p) => ({ ...p, date: newDate, timeSlot: '' }));
+
       if (form.calendar && newDate) {
+        // Clear previous slots immediately
         setAvailableSlots([]);
+        setSlotsVersion(v => v + 1); // Force re-render
         setSlotsError(null);
+        setIsLoadingSlots(true);
+
         const user = users.find((u) => {
           const nm = u.name || `${u.firstName || ''} ${u.lastName || ''}`.trim();
           return nm === form.userCalendar;
         });
-        await fetchAvailableSlots(form.calendar, newDate, user?.id || null);
+
+        try {
+          await fetchAvailableSlots(form.calendar, newDate, user?.id || null);
+        } catch (error) {
+          console.error('❌ Error fetching slots for date change:', error);
+        }
       }
     },
     [form.calendar, form.userCalendar, users, fetchAvailableSlots],
@@ -612,93 +700,93 @@ const validateForm = () => {
     setForm((p) => ({ ...p, internalNotes: p.internalNotes.filter((n) => n.id !== noteId) }));
   };
 
-const handleSubmit = async (e) => {
-  e.preventDefault();
-  if (!validateForm()) {
-    toast.error('Please fill in all required fields');
-    return;
-  }
-  setIsSubmitting(true);
-  try {
-    if (activeTab === 'appointment') {
-      const selectedUser = users.find((u) => {
-        const nm = u.name || `${u.firstName || ''} ${u.lastName || ''}`.trim();
-        return nm === form.userCalendar;
-      });
-
-      // Use Start/End for custom, Date+Slot for default
-      const startISO =
-        form.slotType === 'custom'
-          ? new Date(form.startTime).toISOString()
-          : convertToISOString(form.date, form.timeSlot.split(' - ')[0]);
-
-      const endISO =
-        form.slotType === 'custom'
-          ? new Date(form.endTime).toISOString()
-          : convertToISOString(form.date, form.timeSlot.split(' - ')[1]);
-
-      const appointmentData = {
-        title: form.title,
-        contactId: form.contactId,
-        calendarId: form.calendar || undefined,
-        assignedUserId: selectedUser?.id || undefined,
-        startTime: startISO,
-        endTime: endISO,
-        address: form.meetingLocation === 'custom' ? form.location || 'Custom Location' : 'Calendar Default',
-        notes: form.description,
-        locationId: 'b7vHWUGVUNQGoIlAXabY',
-        appointmentStatus: form.status === 'confirmed' ? 'confirmed' : 'new',
-        meetingLocationType: 'custom',
-        meetingLocationId: 'default',
-        overrideLocationConfig: true,
-        ignoreDateRange: false,
-        toNotify: false,
-        ignoreFreeSlotValidation: true,
-      };
-
-      const result = await appointments.create(appointmentData);
-      if (!result) throw new Error('Failed to create appointment');
-      toast.success(mode === 'edit' ? 'Appointment updated successfully!' : 'Appointment booked successfully!');
-      onClose();
-      resetForm();
-    } else {
-      // BLOCKED TIME should always use Start/End timestamps
-      const selectedUser = users.find((u) => {
-        const nm = u.name || `${u.firstName || ''} ${u.lastName || ''}`.trim();
-        return nm === form.userCalendar;
-      });
-      if (!selectedUser) throw new Error(`Selected user "${form.userCalendar}" not found`);
-      if (!form.calendar) throw new Error('Please select a calendar for the blocked time');
-
-      const validCalendar = calendarOptions.find((c) => c.value === form.calendar);
-      if (!validCalendar) throw new Error(`Selected calendar "${form.calendar}" not found`);
-
-      const { GHL_CONFIG } = await import('../../../config/ghlConfig.js');
-      const blockData = {
-        title: form.title,
-        calendarId: form.calendar,
-        assignedUserId: selectedUser.id,
-        locationId: GHL_CONFIG.locationId,
-        startTime: new Date(form.startTime).toISOString(),
-        endTime: new Date(form.endTime).toISOString(),
-      };
-
-      const result = await createBlockSlot(blockData);
-      if (!result) throw new Error('Failed to create block slot');
-      toast.success(mode === 'edit' ? 'Blocked time updated successfully!' : 'Time blocked successfully!');
-      onClose();
-      resetForm();
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!validateForm()) {
+      toast.error('Please fill in all required fields');
+      return;
     }
-  } catch (err) {
-    toast.error(
-      activeTab === 'appointment'
-        ? 'Failed to save appointment. Please try again.'
-        : 'Failed to block time. Please try again.',
-    );
-  } finally {
-    setIsSubmitting(false);
-  }
-};
+    setIsSubmitting(true);
+    try {
+      if (activeTab === 'appointment') {
+        const selectedUser = users.find((u) => {
+          const nm = u.name || `${u.firstName || ''} ${u.lastName || ''}`.trim();
+          return nm === form.userCalendar;
+        });
+
+        // Use Start/End for custom, Date+Slot for default
+        const startISO =
+          form.slotType === 'custom'
+            ? new Date(form.startTime).toISOString()
+            : convertToISOString(form.date, form.timeSlot.split(' - ')[0]);
+
+        const endISO =
+          form.slotType === 'custom'
+            ? new Date(form.endTime).toISOString()
+            : convertToISOString(form.date, form.timeSlot.split(' - ')[1]);
+
+        const appointmentData = {
+          title: form.title,
+          contactId: form.contactId,
+          calendarId: form.calendar || undefined,
+          assignedUserId: selectedUser?.id || undefined,
+          startTime: startISO,
+          endTime: endISO,
+          address: form.meetingLocation === 'custom' ? form.location || 'Custom Location' : 'Calendar Default',
+          notes: form.description,
+          locationId: 'b7vHWUGVUNQGoIlAXabY',
+          appointmentStatus: form.status === 'confirmed' ? 'confirmed' : 'new',
+          meetingLocationType: 'custom',
+          meetingLocationId: 'default',
+          overrideLocationConfig: true,
+          ignoreDateRange: false,
+          toNotify: false,
+          ignoreFreeSlotValidation: true,
+        };
+
+        const result = await appointments.create(appointmentData);
+        if (!result) throw new Error('Failed to create appointment');
+        toast.success(mode === 'edit' ? 'Appointment updated successfully!' : 'Appointment booked successfully!');
+        onClose();
+        resetForm();
+      } else {
+        // BLOCKED TIME should always use Start/End timestamps
+        const selectedUser = users.find((u) => {
+          const nm = u.name || `${u.firstName || ''} ${u.lastName || ''}`.trim();
+          return nm === form.userCalendar;
+        });
+        if (!selectedUser) throw new Error(`Selected user "${form.userCalendar}" not found`);
+        if (!form.calendar) throw new Error('Please select a calendar for the blocked time');
+
+        const validCalendar = calendarOptions.find((c) => c.value === form.calendar);
+        if (!validCalendar) throw new Error(`Selected calendar "${form.calendar}" not found`);
+
+        const { GHL_CONFIG } = await import('../../../config/ghlConfig.js');
+        const blockData = {
+          title: form.title,
+          calendarId: form.calendar,
+          assignedUserId: selectedUser.id,
+          locationId: GHL_CONFIG.locationId,
+          startTime: new Date(form.startTime).toISOString(),
+          endTime: new Date(form.endTime).toISOString(),
+        };
+
+        const result = await createBlockSlot(blockData);
+        if (!result) throw new Error('Failed to create block slot');
+        toast.success(mode === 'edit' ? 'Blocked time updated successfully!' : 'Time blocked successfully!');
+        onClose();
+        resetForm();
+      }
+    } catch (_err) {
+      toast.error(
+        activeTab === 'appointment'
+          ? 'Failed to save appointment. Please try again.'
+          : 'Failed to block time. Please try again.',
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -800,15 +888,6 @@ const handleSubmit = async (e) => {
                     <div className="space-y-3">
                       <div className="flex items-center justify-between">
                         <label className="block text-sm font-semibold uppercase tracking-wide text-gray-900">Calendar</label>
-                        <button
-                          type="button"
-                          onClick={fetchEnhancedCalendarList}
-                          className="flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs text-blue-600 transition-colors hover:bg-blue-50 hover:text-blue-700"
-                          title="Refresh calendar list"
-                        >
-                          <FiRefreshCw className="h-3 w-3" />
-                          Refresh
-                        </button>
                       </div>
 
                       {/* Dropdown */}
@@ -947,65 +1026,6 @@ const handleSubmit = async (e) => {
                           />
                         )}
                       </div>
-
-                      {/* Availability status */}
-                      {form.calendar && (
-                        <div
-                          className={`mt-2 rounded-lg border p-3 text-sm ${
-                            isLoadingSlots
-                              ? 'border-blue-200 bg-blue-50 text-blue-700'
-                              : slotsError
-                              ? 'border-orange-200 bg-orange-50 text-orange-700'
-                              : availableSlots.length > 0
-                              ? 'border-green-200 bg-green-50 text-green-700'
-                              : 'border-gray-200 bg-gray-50 text-gray-600'
-                          }`}
-                        >
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              {isLoadingSlots ? (
-                                <>
-                                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-blue-400 border-t-transparent" />
-                                  <span className="font-medium">Loading availability…</span>
-                                </>
-                              ) : slotsError ? (
-                                <>
-                                  <FiAlertTriangle className="h-4 w-4" />
-                                  <span className="font-medium">Setup needed in GHL</span>
-                                </>
-                              ) : availableSlots.length > 0 ? (
-                                <>
-                                  <FiCheck className="h-4 w-4" />
-                                  <span className="font-medium">{availableSlots.length} slots available</span>
-                                </>
-                              ) : (
-                                <>
-                                  <FiCalendar className="h-4 w-4" />
-                                  <span className="font-medium">No availability configured</span>
-                                </>
-                              )}
-                            </div>
-                            {form.calendar && form.date && (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const selectedUser = users.find((u) => {
-                                    const nm = u.name || `${u.firstName || ''} ${u.lastName || ''}`.trim();
-                                    return nm === form.userCalendar;
-                                  });
-                                  fetchAvailableSlots(form.calendar, form.date, selectedUser?.id || null);
-                                }}
-                                disabled={isLoadingSlots}
-                                className="flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs text-blue-600 transition-colors hover:bg-blue-50 disabled:opacity-50"
-                                title="Refresh available slots"
-                              >
-                                <FiRefreshCw className={`h-3 w-3 ${isLoadingSlots ? 'animate-spin' : ''}`} />
-                                Refresh
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      )}
                     </div>
 
                     {/* Title */}
@@ -1089,9 +1109,11 @@ const handleSubmit = async (e) => {
                       <div className="rounded-xl border border-gray-200 bg-gray-50 p-6">
                         {/* helper text */}
                         <p className="mb-4 text-sm text-gray-600">
-                          Showing slots in this timezone:
+                          Showing slots in timezone:
                           {isLoadingTimezone
                             ? ' (Loading timezone...)'
+                            : form.timezone
+                            ? ` ${form.timezone}`
                             : ghlTimezone
                             ? ` (${ghlTimezone})`
                             : ' (Default Timezone)'}
@@ -1099,22 +1121,14 @@ const handleSubmit = async (e) => {
 
                         {/* timezone */}
                         <div className="mb-4">
-                          <label className="mb-2 block text-sm font-medium text-gray-700">Select Timezone:</label>
-                          <select
+                          <EnhancedTimezoneDropdown
                             value={form.timezone}
-                            onChange={(e) => setForm({ ...form, timezone: e.target.value })}
-                            className="w-full rounded-xl border-2 border-gray-200 bg-white px-4 py-3 text-base font-medium transition-all duration-200 focus:border-blue-400 focus:outline-none focus:ring-4 focus:ring-blue-100"
-                          >
-                            {timezoneOptions.length > 0 ? (
-                              timezoneOptions.map((tz) => (
-                                <option key={tz.value} value={tz.value}>
-                                  {tz.label}
-                                </option>
-                              ))
-                            ) : (
-                              <option value="America/Los_Angeles">GMT-08:00 America/Los_Angeles (PST/PDT)</option>
-                            )}
-                          </select>
+                            onChange={(timezone) => setForm({ ...form, timezone })}
+                            locationId={null} // Will use default from config
+                            placeholder="Select timezone..."
+                            onRefresh={() => {
+                            }}
+                          />
                         </div>
 
                         {/* segmented buttons */}
@@ -1189,65 +1203,66 @@ const handleSubmit = async (e) => {
                                   {isLoadingSlots && <span className="ml-2 text-xs text-blue-600">Loading…</span>}
                                   {slotsError && <span className="ml-2 text-xs text-red-600">Using fallback</span>}
                                 </label>
-                                {form.calendar && form.date && (
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      const u = users.find((uu) => {
-                                        const nm = uu.name || `${uu.firstName || ''} ${uu.lastName || ''}`.trim();
-                                        return nm === form.userCalendar;
-                                      });
-                                      fetchAvailableSlots(form.calendar, form.date, u?.id || null);
-                                    }}
-                                    disabled={isLoadingSlots}
-                                    className="flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs text-blue-600 transition-colors hover:bg-blue-50 disabled:opacity-50"
-                                    title="Refresh available slots"
-                                  >
-                                    <FiRefreshCw className={`h-3 w-3 ${isLoadingSlots ? 'animate-spin' : ''}`} />
-                                    Refresh
-                                  </button>
-                                )}
                               </div>
 
                               <select
                                 value={form.timeSlot}
                                 onChange={(e) => setForm({ ...form, timeSlot: e.target.value })}
+                                onFocus={() => {
+                                }}
                                 disabled={isLoadingSlots}
+                                key={`slot-dropdown-${slotsVersion}-${availableSlots.length}-${form.timezone}-${form.date}-${form.calendar}`}
                                 className="w-full rounded-xl border-2 border-gray-200 bg-white px-4 py-3 text-base font-medium transition-all duration-200 focus:border-blue-400 focus:outline-none focus:ring-4 focus:ring-blue-100 disabled:cursor-not-allowed disabled:opacity-50"
                               >
-                                {isLoadingSlots ? (
-                                  <option value="">Loading available slots…</option>
-                                ) : slotsError ? (
-                                  <>
-                                    <option value="">Using default times</option>
-                                    {(timeSlots[`${form.customDuration}min`] || timeSlots['30min']).map((slot) => (
-                                      <option key={slot} value={slot}>
-                                        {slot}
-                                      </option>
-                                    ))}
-                                  </>
-                                ) : availableSlots.length > 0 ? (
-                                  <>
-                                    <option value="">
-                                      Select an available time slot ({getAvailableTimeSlots().length} available)
-                                    </option>
-                                    {getAvailableTimeSlots().map((slot, i) => (
-                                      <option key={`ghl-slot-${i}`} value={slot}>
-                                        {slot}
-                                      </option>
-                                    ))}
-                                  </>
-                                ) : (
-                                  <>
-                                    <option value="">No slots available for this date</option>
-                                    <option disabled>────────── Default Times ──────────</option>
-                                    {(timeSlots[`${form.customDuration}min`] || timeSlots['30min']).map((slot) => (
-                                      <option key={slot} value={slot}>
-                                        {slot} (default)
-                                      </option>
-                                    ))}
-                                  </>
-                                )}
+                                {(() => {
+                                  const convertedSlots = getAvailableTimeSlots();
+
+                                  if (isLoadingSlots) {
+                                    return <option value="">Loading available slots…</option>;
+                                  }
+
+                                  if (slotsError) {
+                                    return (
+                                      <>
+                                        <option value="">Using default times</option>
+                                        {(timeSlots[`${form.customDuration}min`] || timeSlots['30min']).map((slot) => (
+                                          <option key={slot} value={slot}>
+                                            {slot}
+                                          </option>
+                                        ))}
+                                      </>
+                                    );
+                                  }
+
+                                  // Check if we have converted slots (this includes both API slots and fallback slots)
+                                  if (convertedSlots.length > 0) {
+                                    return (
+                                      <>
+                                        <option value="">
+                                          Select an available time slot ({convertedSlots.length} available)
+                                        </option>
+                                        {convertedSlots.map((slot, i) => (
+                                          <option key={`ghl-slot-${i}`} value={slot}>
+                                            {slot}
+                                          </option>
+                                        ))}
+                                      </>
+                                    );
+                                  }
+
+                                  // No slots at all - fallback to default times
+                                  return (
+                                    <>
+                                      <option value="">No slots available for this date</option>
+                                      <option disabled>────────── Default Times ──────────</option>
+                                      {(timeSlots[`${form.customDuration}min`] || timeSlots['30min']).map((slot) => (
+                                        <option key={slot} value={slot}>
+                                          {slot} (default)
+                                        </option>
+                                      ))}
+                                    </>
+                                  );
+                                })()}
                               </select>
                             </div>
                           </div>
@@ -1308,7 +1323,7 @@ const handleSubmit = async (e) => {
                               )}
                             </div>
 
-                            {/* >>> NEW CODE START: Recurring inline */}
+                            {/* Recurring inline */}
                             <div className="space-y-3 pt-2">
                               <label className="flex items-center gap-2 text-sm font-semibold text-gray-700">
                                 <input
@@ -1346,7 +1361,6 @@ const handleSubmit = async (e) => {
                                 </div>
                               )}
                             </div>
-                            {/* <<< NEW CODE END: Recurring inline */}
 
                           </div>
                         )}
@@ -1390,7 +1404,7 @@ const handleSubmit = async (e) => {
                         </label>
                       </div>
 
-                      {/* Inputs that only show for Custom (matches Image 1) */}
+                      {/* Inputs that only show for Custom */}
                       {form.meetingLocation === 'custom' && (
                         <div className="space-y-3 pt-2">
                           <select
@@ -1398,8 +1412,6 @@ const handleSubmit = async (e) => {
                             onChange={(e) => setForm({ ...form, locationType: e.target.value })}
                             className="w-full rounded-xl border-2 border-gray-200 bg-white px-4 py-3 text-base font-medium transition-all duration-200 focus:border-blue-400 focus:outline-none focus:ring-4 focus:ring-blue-100"
                           >
-                            {/* keep a single 'Custom' option to mirror your screenshot;
-                                add Zoom/Meet/Phone/etc later if you want */}
                             <option value="custom">Custom</option>
                           </select>
 
@@ -1515,25 +1527,19 @@ const handleSubmit = async (e) => {
                         Date & Time
                       </label>
                       <div className="space-y-4 rounded-xl border border-gray-200 bg-gray-50 p-6">
-                        <p className="text-sm text-gray-600">Showing slots in this timezone: (Account Timezone)</p>
+                        <p className="text-sm text-gray-600">
+                          Showing slots in timezone: {form.timezone || '(Default Timezone)'}
+                        </p>
 
                         <div>
-                          <label className="mb-2 block text-sm font-medium text-gray-700">Select Timezone:</label>
-                          <select
+                          <EnhancedTimezoneDropdown
                             value={form.timezone}
-                            onChange={(e) => setForm({ ...form, timezone: e.target.value })}
-                            className="w-full rounded-xl border-2 border-gray-200 bg-white px-4 py-3 text-base font-medium transition-all duration-200 focus:border-blue-400 focus:outline-none focus:ring-4 focus:ring-blue-100"
-                          >
-                            {timezoneOptions.length > 0 ? (
-                              timezoneOptions.map((tz) => (
-                                <option key={tz.value} value={tz.value}>
-                                  {tz.label}
-                                </option>
-                              ))
-                            ) : (
-                              <option value="America/Los_Angeles">GMT-08:00 America/Los_Angeles (PST/PDT)</option>
-                            )}
-                          </select>
+                            onChange={(timezone) => setForm({ ...form, timezone })}
+                            locationId={null} // Will use default from config
+                            placeholder="Select timezone..."
+                            onRefresh={() => {
+                            }}
+                          />
                         </div>
 
                         <div className="space-y-2">

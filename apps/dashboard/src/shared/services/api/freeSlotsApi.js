@@ -6,12 +6,16 @@
 //
 // API Reference:
 // - Response format: { "_dates_": {...}, "slots": [...] }
-// - Date range limit: Maximum 31 days
+// - Date range limit: Maximum 31 days (inclusive)
 // - Supported parameters: startDate, endDate, timezone, userId, userIds
 // - Timestamp format: milliseconds (e.g., 1548898600000)
 // ========================================
 
 import { GHL_CONFIG } from '@config/ghlConfig';
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+const MAX_RANGE_MS = 31 * DAY_MS; // inclusive window
+const DEBUG = (typeof process !== 'undefined' && process?.env?.NODE_ENV !== 'production' && process?.env?.GHL_DEBUG !== '0');
 
 /**
  * 🎯 Fetch free slots from GHL Calendar API
@@ -21,7 +25,8 @@ import { GHL_CONFIG } from '@config/ghlConfig';
  * @param {string|number|Date} params.endDate - End date (required)
  * @param {string} [params.timeZone] - Timezone (optional, e.g., "America/Chihuahua")
  * @param {string} [params.userId] - User ID filter (optional)
- * @param {string[]} [params.userIds] - Multiple user IDs filter (optional)
+ * @param {string[]|string} [params.userIds] - Multiple user IDs filter (optional)
+ * @param {AbortSignal} [params.signal] - Optional AbortController signal
  * @returns {Promise<Object>} - Standardized response
  */
 export async function fetchFreeSlots({
@@ -31,14 +36,15 @@ export async function fetchFreeSlots({
   timeZone = null,
   userId = null,
   userIds = null,
-}) {
+  signal,
+} = {}) {
   // Validate required parameters
   if (!calendarId || !startDate || !endDate) {
     throw new Error('calendarId, startDate, and endDate are required');
   }
 
-  if (typeof calendarId !== 'string' || calendarId.length < 5) {
-    throw new Error(`Invalid calendar ID: ${calendarId} (too short)`);
+  if (typeof calendarId !== 'string') {
+    throw new Error('Invalid calendar ID: must be a string');
   }
 
   try {
@@ -46,35 +52,37 @@ export async function fetchFreeSlots({
     const startMs = normalizeDateToMs(startDate);
     const endMs = normalizeDateToMs(endDate);
 
-    // Validate date range (GHL API limit: 31 days maximum)
-    const daysDifference = (endMs - startMs) / (1000 * 60 * 60 * 24);
-    if (daysDifference > 31) {
-      throw new Error(`Date range too large: ${daysDifference.toFixed(1)} days. Maximum allowed: 31 days.`);
+    // Validate date range (GHL API limit: 31 days maximum inclusive)
+    if ((endMs - startMs) > (MAX_RANGE_MS - 1)) {
+      const days = Math.ceil((endMs - startMs) / DAY_MS);
+      throw new Error(`Date range too large: ${days} days. Maximum allowed: 31 days.`);
     }
 
-    // Build API URL with proper query parameters per GHL documentation
+    // Build API URL with query parameters per GHL documentation
     const params = new URLSearchParams();
-    params.append('startDate', startMs.toString());
-    params.append('endDate', endMs.toString());
+    params.append('startDate', String(startMs));
+    params.append('endDate', String(endMs));
 
-    // Optional parameters (based on GHL API docs)
     if (timeZone) params.append('timezone', timeZone);
     if (userId) params.append('userId', userId);
-    if (userIds && Array.isArray(userIds) && userIds.length > 0) {
-      userIds.forEach(id => params.append('userIds', id));
-    }
+    if (userIds) appendUserIds(params, userIds, GHL_CONFIG?.userIdsStyle || 'repeat'); // 'repeat' | 'csv'
 
     const apiUrl = `https://services.leadconnectorhq.com/calendars/${encodeURIComponent(calendarId)}/free-slots?${params.toString()}`;
 
     // Make API request
+    const headers = {
+      'Accept': 'application/json',
+      'Authorization': `Bearer ${GHL_CONFIG.token}`,
+      'Version': GHL_CONFIG.version,
+    };
+    if (GHL_CONFIG?.locationId) {
+      headers['Location-Id'] = GHL_CONFIG.locationId;
+    }
+
     const response = await fetch(apiUrl, {
       method: 'GET',
-      headers: {
-        'Accept': 'application/json',
-        'Authorization': `Bearer ${GHL_CONFIG.token}`,
-        'Version': GHL_CONFIG.version,
-        'Content-Type': 'application/json',
-      },
+      headers,
+      signal,
     });
 
     if (!response.ok) {
@@ -88,7 +96,6 @@ export async function fetchFreeSlots({
         errorMessage = errorText || errorMessage;
       }
 
-      // Enhanced error messages
       if (response.status === 401) {
         throw new Error('Authentication failed: Invalid or expired API token');
       } else if (response.status === 403) {
@@ -107,25 +114,31 @@ export async function fetchFreeSlots({
     let slots = [];
     let dates = {};
 
-    console.warn('🔍 GHL API Raw Response:', {
-      keys: Object.keys(data),
-      hasSlots: !!data.slots,
-      hasDates: !!data._dates_,
-      sampleData: JSON.stringify(data).substring(0, 500),
-      fullResponse: data,
-    });
+    if (DEBUG) {
+      // Avoid logging entire payload in production
+      // Note: For sensitive data policies, prefer masking.
+      try {
+        // Slice to avoid huge console spam
+        const sampleData = JSON.stringify(data).slice(0, 500);
+
+        console.warn('🔍 GHL API Raw Response:', {
+          keys: Object.keys(data || {}),
+          hasSlots: !!data?.slots,
+          hasDates: !!data?._dates_,
+          sampleData,
+        });
+      } catch {}
+    }
 
     // Handle the documented _dates_ object structure
-    if (data._dates_ && typeof data._dates_ === 'object') {
+    if (data?._dates_ && typeof data._dates_ === 'object') {
       dates = data._dates_;
 
-      // Extract slots from _dates_ object
       Object.keys(dates).forEach(dateKey => {
         const dayData = dates[dateKey];
-        if (dayData && dayData.slots && Array.isArray(dayData.slots)) {
-          // Add date information to each slot
+        if (dayData?.slots && Array.isArray(dayData.slots)) {
           const dateSlotsWithInfo = dayData.slots.map(slot => ({
-            ...slot,
+            ...(typeof slot === 'object' ? slot : { startTime: slot }),
             date: dateKey,
           }));
           slots.push(...dateSlotsWithInfo);
@@ -134,46 +147,72 @@ export async function fetchFreeSlots({
     }
 
     // Also check for direct slots array (fallback)
-    if (data.slots && Array.isArray(data.slots)) {
-      slots = [...slots, ...data.slots];
+    if (Array.isArray(data?.slots)) {
+      // Assume strings or objects of slot entries
+      slots = [...slots, ...data.slots.map(s => (typeof s === 'object' ? s : { startTime: s }))];
     }
 
-    // Check for any date-like keys in the response (YYYY-MM-DD format)
-    const dateKeys = Object.keys(data).filter(key =>
-      key.match(/^\d{4}-\d{2}-\d{2}$/) || // Standard date format
-      key.match(/^\d{8}$/), // Alternative format like 20240815
+    // Check for any date-like keys in the response (YYYY-MM-DD or YYYYMMDD)
+    const dateKeys = Object.keys(data || {}).filter(key =>
+      /^\d{4}-\d{2}-\d{2}$/.test(key) || /^\d{8}$/.test(key),
     );
 
     if (dateKeys.length > 0) {
-      console.warn('🗓️ Found date keys:', dateKeys);
+      if (DEBUG) {
+
+        console.warn('🗓️ Found date keys:', dateKeys);
+      }
       dateKeys.forEach(dateKey => {
         const dayData = data[dateKey];
-        if (dayData) {
-          // Check if dayData has slots directly
-          if (Array.isArray(dayData)) {
-            slots.push(...dayData.map(slot => ({ ...slot, date: dateKey })));
-          } else if (dayData.slots && Array.isArray(dayData.slots)) {
-            const dateSpecificSlots = dayData.slots.map(slot => ({
-              ...slot,
+        if (!dayData) return;
+
+        if (Array.isArray(dayData)) {
+          // Handle weird object-to-string conversion issue
+          const normalizedSlots = dayData.map(slot => {
+            const normalizedSlot = normalizeSlotObject(slot);
+            return {
+              ...(typeof normalizedSlot === 'object' ? normalizedSlot : { startTime: normalizedSlot }),
               date: dateKey,
-            }));
-            slots.push(...dateSpecificSlots);
+              slot: typeof normalizedSlot === 'string' ? normalizedSlot : JSON.stringify(normalizedSlot),
+            };
+          });
+          slots.push(...normalizedSlots);
+        } else if (dayData?.slots && Array.isArray(dayData.slots)) {
+          if (DEBUG) {
+
+            console.warn(`📅 Found ${dayData.slots.length} slots for ${dateKey}`);
           }
+          const dateSpecificSlots = dayData.slots.map(slot => {
+            const iso = typeof slot === 'string' ? slot : slot?.startTime || slot?.start || slot;
+            return {
+              startTime: iso,
+              date: dateKey,
+              slot: iso, // Keep the original ISO if it is a string
+              timezone: typeof iso === 'string' && iso.includes('-07:00') ? 'America/Los_Angeles' : undefined,
+            };
+          });
+          slots.push(...dateSpecificSlots);
         }
       });
     }
 
     // Final fallback - check if data itself is an array
     if (Array.isArray(data) && data.length > 0) {
-      console.warn('📋 Data is array, using directly');
-      slots = data;
+      if (DEBUG) {
+
+        console.warn('📋 Data is array, using directly');
+      }
+      slots = data.map(s => (typeof s === 'object' ? s : { startTime: s }));
     }
 
-    console.warn('🎯 Final parsed slots:', {
-      totalSlots: slots.length,
-      firstSlot: slots[0],
-      slotTypes: slots.map(s => typeof s).slice(0, 3),
-    });
+    if (DEBUG) {
+
+      console.warn('🎯 Final parsed slots:', {
+        totalSlots: slots.length,
+        firstSlot: slots[0],
+        slotTypes: slots.slice(0, 3).map(s => typeof s),
+      });
+    }
 
     return {
       success: true,
@@ -183,7 +222,7 @@ export async function fetchFreeSlots({
       dateRange: {
         start: new Date(startMs).toISOString(),
         end: new Date(endMs).toISOString(),
-        days: Math.ceil((endMs - startMs) / (1000 * 60 * 60 * 24)),
+        days: Math.ceil((endMs - startMs) / DAY_MS),
       },
       meta: {
         calendarId,
@@ -194,7 +233,7 @@ export async function fetchFreeSlots({
         endDate: endMs,
         requestTimestamp: new Date().toISOString(),
       },
-      rawResponse: data,
+      rawResponse: DEBUG ? data : undefined, // avoid returning entire payload in prod
     };
 
   } catch (error) {
@@ -203,7 +242,7 @@ export async function fetchFreeSlots({
       slots: [],
       dates: {},
       totalSlots: 0,
-      error: error.message,
+      error: error?.message || String(error),
       meta: {
         calendarId,
         timeZone,
@@ -216,56 +255,93 @@ export async function fetchFreeSlots({
 }
 
 /**
- * 🎯 Convenience function to fetch free slots for a specific date
+ * 🎯 Convenience function to fetch free slots for a specific date with calendar timezone
  * @param {string} calendarId - Calendar ID (required)
- * @param {Date|string} date - Date to fetch slots for (required)
- * @param {string} [timeZone] - Timezone (optional, e.g., "America/Chihuahua")
+ * @param {Date|string|number} date - Date to fetch slots for (required)
+ * @param {string} [timeZone] - Timezone (optional, will auto-detect from calendar if not provided)
  * @param {string} [userId] - User ID to filter by (optional)
+ * @param {AbortSignal} [signal] - Optional AbortController signal
  * @returns {Promise<Object>} - Standardized free slots response
  */
-export async function fetchFreeSlotsForDate(calendarId, date, timeZone = null, userId = null) {
-  const selectedDate = new Date(date);
+export async function fetchFreeSlotsForDate(calendarId, date, timeZone = null, userId = null, signal) {
+  const selectedDate = new Date(normalizeDateToMs(date));
 
   // Validate date
   if (isNaN(selectedDate.getTime())) {
     throw new Error(`Invalid date provided: ${date}`);
   }
 
+  // Auto-detect timezone from calendar if not provided
+  let effectiveTimezone = timeZone;
+  if (!effectiveTimezone) {
+    try {
+      const { getCalendarTimezone } = await import('../calendarTimezoneService');
+      const calendarTimezoneInfo = await getCalendarTimezone(calendarId);
+      effectiveTimezone = calendarTimezoneInfo.timezone;
+      if (DEBUG) {
+
+        console.warn('🎯 Auto-detected timezone for calendar:', calendarId, '->', effectiveTimezone);
+      }
+    } catch (err) {
+      if (DEBUG) {
+
+        console.warn('⚠️ Failed to auto-detect calendar timezone, using fallback:', err?.message);
+      }
+      effectiveTimezone = 'America/Los_Angeles';
+    }
+  }
+
   // Use UTC dates to avoid timezone confusion
-  // Create proper UTC timestamps for the requested date
   const year = selectedDate.getUTCFullYear();
   const month = selectedDate.getUTCMonth();
   const day = selectedDate.getUTCDate();
 
-  // Set to beginning of day in UTC (00:00:00.000 UTC)
-  const startDate = new Date(Date.UTC(year, month, day, 0, 0, 0, 0)).getTime();
-
-  // Set to end of day in UTC (23:59:59.999 UTC)
-  const endDate = new Date(Date.UTC(year, month, day, 23, 59, 59, 999)).getTime();
+  const startDate = Date.UTC(year, month, day, 0, 0, 0, 0);
+  const endDate = Date.UTC(year, month, day, 23, 59, 59, 999);
 
   const response = await fetchFreeSlots({
     calendarId,
     startDate,
     endDate,
-    timeZone,
+    timeZone: effectiveTimezone,
     userId,
+    signal,
   });
+
+  // Add timezone information to the response
+  if (response.success) {
+    response.meta = {
+      ...response.meta,
+      detectedTimezone: effectiveTimezone,
+      timezoneSource: timeZone ? 'provided' : 'auto-detected',
+    };
+  }
 
   // For single-day requests, filter slots to only include the requested date
   if (response.success && response.slots.length > 0) {
-    const requestedDateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`; // "2025-08-15"
+    const requestedDateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`; // "YYYY-MM-DD"
 
-    // Filter slots to only include ones that start with the requested date
+    const isOnRequestedDate = (iso) => typeof iso === 'string' && iso.startsWith(requestedDateStr);
+
     const daySlots = response.slots.filter(slot => {
-      if (typeof slot === 'string') {
-        return slot.startsWith(requestedDateStr);
+      if (typeof slot === 'string') return isOnRequestedDate(slot);
+      if (slot && typeof slot === 'object') {
+        const candidates = [
+          slot.startTime,
+          slot.start,
+          slot.from,
+          slot.time,
+          slot.slot, // sometimes we tuck the original ISO here
+        ].filter(Boolean);
+        return candidates.some(isOnRequestedDate);
       }
-      return true; // Keep non-string slots as-is
+      return false;
     });
 
     return {
       ...response,
       slots: daySlots,
+      totalSlots: daySlots.length,
     };
   }
 
@@ -273,26 +349,28 @@ export async function fetchFreeSlotsForDate(calendarId, date, timeZone = null, u
 }
 
 /**
- * 🎯 Fetch free slots using broader date range (similar to working cURL approach)
+ * 🎯 Fetch free slots using a broader date range window
  * @param {string} calendarId - Calendar ID (required)
- * @param {Date|string} centerDate - Center date for the range (required)
+ * @param {Date|string|number} centerDate - Center date for the range (required)
  * @param {number} [daysBefore=7] - Days before center date to include
  * @param {number} [daysAfter=7] - Days after center date to include
- * @param {string} [timeZone] - Timezone for metadata/logging only (NOT sent to API)
+ * @param {string} [timeZone] - Timezone (sent to API if provided)
  * @param {string} [userId] - User ID to filter by (optional)
+ * @param {AbortSignal} [signal] - Optional AbortController signal
  * @returns {Promise<Object>} - Standardized free slots response
  */
-export async function fetchFreeSlotsRange(calendarId, centerDate, daysBefore = 7, daysAfter = 7, timeZone = null, userId = null) {
-  const center = new Date(centerDate);
+export async function fetchFreeSlotsRange(calendarId, centerDate, daysBefore = 7, daysAfter = 7, timeZone = null, userId = null, signal) {
+  const centerMs = normalizeDateToMs(centerDate);
+  const center = new Date(centerMs);
 
   // Validate date
   if (isNaN(center.getTime())) {
     throw new Error(`Invalid center date provided: ${centerDate}`);
   }
 
-  // Create broader date range in UTC
-  const startDate = new Date(center.getTime() - (daysBefore * 24 * 60 * 60 * 1000));
-  const endDate = new Date(center.getTime() + (daysAfter * 24 * 60 * 60 * 1000));
+  // Create broader date range in UTC by offsetting raw ms
+  const startDate = new Date(center.getTime() - (daysBefore * DAY_MS));
+  const endDate = new Date(center.getTime() + (daysAfter * DAY_MS));
 
   return await fetchFreeSlots({
     calendarId,
@@ -300,7 +378,27 @@ export async function fetchFreeSlotsRange(calendarId, centerDate, daysBefore = 7
     endDate: endDate.getTime(),
     timeZone,
     userId,
+    signal,
   });
+}
+
+/**
+ * 🔧 Helper: append userIds with style
+ * @param {URLSearchParams} params
+ * @param {string[]|string} userIds
+ * @param {'repeat'|'csv'} style - 'repeat' (userIds=a&userIds=b) or 'csv' (userIds=a,b)
+ */
+function appendUserIds(params, userIds, style = 'repeat') {
+  if (!userIds) return;
+  if (Array.isArray(userIds)) {
+    if (style === 'csv') {
+      params.append('userIds', userIds.join(','));
+    } else {
+      userIds.forEach(id => params.append('userIds', id));
+    }
+  } else if (typeof userIds === 'string') {
+    params.append('userIds', userIds);
+  }
 }
 
 /**
@@ -309,20 +407,48 @@ export async function fetchFreeSlotsRange(calendarId, centerDate, daysBefore = 7
  * @returns {number} - Timestamp in milliseconds
  */
 function normalizeDateToMs(date) {
-  if (date instanceof Date) {
-    return date.getTime();
-  } else if (typeof date === 'string') {
-    const parsedDate = new Date(date);
-    if (isNaN(parsedDate.getTime())) {
+  if (date instanceof Date) return date.getTime();
+
+  if (typeof date === 'number') {
+    // Heuristic: treat < 1e11 as seconds
+    return date < 1e11 ? date * 1000 : date;
+  }
+
+  if (typeof date === 'string') {
+    const parsed = new Date(date);
+    if (Number.isNaN(parsed.getTime())) {
       throw new Error(`Invalid date string: ${date}`);
     }
-    return parsedDate.getTime();
-  } else if (typeof date === 'number') {
-    // If it's a timestamp in seconds, convert to milliseconds
-    return date < 10000000000 ? date * 1000 : date;
-  } else {
-    throw new Error(`Unsupported date format: ${typeof date}`);
+    return parsed.getTime();
   }
+
+  throw new Error(`Unsupported date format: ${typeof date}`);
+}
+
+/**
+ * 🔧 Helper function to normalize slot objects that come back as character-indexed objects
+ * @param {Object|string} slot - Slot data from GHL API
+ * @returns {string|Object} - Normalized slot data
+ */
+function normalizeSlotObject(slot) {
+  if (typeof slot === 'string') return slot;
+
+  if (slot && typeof slot === 'object') {
+    const keys = Object.keys(slot);
+    const isCharacterIndexed = keys.length > 0 && keys.every(key => /^\d+$/.test(key));
+
+    if (isCharacterIndexed) {
+      const sortedKeys = keys.sort((a, b) => parseInt(a, 10) - parseInt(b, 10));
+      const reconstructedString = sortedKeys.map(key => slot[key]).join('');
+      if (DEBUG) {
+
+        console.warn('🔧 Reconstructed slot string:', reconstructedString);
+      }
+      return reconstructedString;
+    }
+  }
+
+  return slot;
 }
 
 // Export the main function as default for backward compatibility

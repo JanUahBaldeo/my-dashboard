@@ -8,7 +8,7 @@ import { TaskContext } from '@app/providers/TaskContext';
 import { CalendarContext } from '@app/providers/CalendarContext';
 import { AnimatePresence, motion } from 'framer-motion';
 import { StatCard, SectionHeader, SearchInput, CalendarList } from '@shared/components/ui';
-import { FiCalendar, FiPlus, FiEdit3, FiTrash2, FiX, FiAlertCircle } from 'react-icons/fi';
+import { FiCalendar, FiPlus, FiX } from 'react-icons/fi';
 import AppointmentModal from '@shared/components/ui/AppointmentModal';
 import { fetchGHLCalendarEvents, getCalendarsList } from '@shared/services/api/ghlCalendarService';
 import { GHL_CONFIG } from '@config/ghlConfig';
@@ -28,7 +28,7 @@ const categoryColors = {
 const getNextWeekISO = (start, weeks) => {
   const date = new Date(start);
   date.setDate(date.getDate() + weeks * 7);
-  return date.toISOString().split('T')[0];
+  return toLocalYYYYMMDD(date);
 };
 
 const CalendarSection = () => {
@@ -38,9 +38,8 @@ const CalendarSection = () => {
   const { tasksByCategory = {} } = taskContext || {};
   const { appointmentsByCategory = {} } = calendarContext || {};
 
-  const [filter, setFilter] = useState('All');
+  const [filter, setFilter] = useState('All Events');
   const [search, setSearch] = useState('');
-  const [modalOpen, setModalOpen] = useState(false);
   const [appointmentModalOpen, setAppointmentModalOpen] = useState(false);
   const [calendarListOpen, setCalendarListOpen] = useState(false);
   const [selectedDate, setSelectedDate] = useState(null);
@@ -75,8 +74,8 @@ const CalendarSection = () => {
           {
             id: '1',
             title: 'Client Meeting',
-            start: new Date().toISOString().split('T')[0],
-            end: new Date().toISOString().split('T')[0],
+            start: toLocalYYYYMMDD(new Date()),
+            end: toLocalYYYYMMDD(new Date()),
             category: 'Activity',
             description: 'Discuss loan application progress',
             location: 'Conference Room A',
@@ -290,7 +289,7 @@ const CalendarSection = () => {
     const out = [];
     for (let i = 0; i < allTasks.length; i++) {
       const t = allTasks[i];
-      const start = t.dueDate || t.date || new Date().toISOString().split('T')[0];
+      const start = t.dueDate || t.date || toLocalYYYYMMDD(new Date());
       const key = `${t.id}-${t.title}-${start}`;
       if (uniq.has(key)) continue;
       uniq.set(key, true);
@@ -346,10 +345,6 @@ const CalendarSection = () => {
     });
 
     let res = unique;
-    if (filter !== 'All Events') {
-      const cat = filter.replace(' Events', '');
-      res = res.filter((e) => (e.extendedProps && e.extendedProps.category ? e.extendedProps.category : e.category) === cat);
-    }
     if (search) {
       const q = search.toLowerCase();
       res = res.filter(
@@ -378,7 +373,7 @@ const CalendarSection = () => {
       location: (event.extendedProps && event.extendedProps.location) || event.location || '',
       attendees: (event.extendedProps && event.extendedProps.attendees) || event.attendees || '',
     });
-    setModalOpen(true);
+    setAppointmentModalOpen(true);
   };
 
   const handleMoreLinkClick = (arg) => {
@@ -386,9 +381,9 @@ const CalendarSection = () => {
     const dayEl = arg.dayEl || arg.el;
     if (!date || !dayEl) return false;
 
-    const targetDate = new Date(date).toISOString().split('T')[0];
+    const targetDate = toLocalYYYYMMDD(date);
     const dateEvents = filteredEvents.filter((e) => {
-      const d = new Date(e.start).toISOString().split('T')[0];
+      const d = toLocalYYYYMMDD(e.start);
       return d === targetDate;
     });
 
@@ -465,14 +460,14 @@ const CalendarSection = () => {
       toast.success('Event added');
     }
 
-    setModalOpen(false);
+    setAppointmentModalOpen(false);
     setForm({ title: '', category: 'Activity', repeat: false, description: '', location: '', attendees: '' });
   };
 
   const deleteEvent = () => {
     setEvents((prev) => prev.filter((e) => e.id !== editId));
     toast.success('Event deleted');
-    setModalOpen(false);
+    setAppointmentModalOpen(false);
     setForm({ title: '', category: 'Activity', repeat: false, description: '', location: '', attendees: '' });
   };
 
@@ -526,12 +521,6 @@ const CalendarSection = () => {
             className="w-40 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#01818E]/10 focus:border-[#01818E] transition-all duration-300 shadow-sm bg-white hover:border-gray-300"
           >
             <option>All Events</option>
-            <option>Activity</option>
-            <option>Campaign</option>
-            <option>Email</option>
-            <option>Task</option>
-            <option>Meeting</option>
-            <option>Appointment</option>
           </select>
         </div>
       </SectionHeader>
@@ -551,7 +540,7 @@ const CalendarSection = () => {
             <FullCalendar
               plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
               initialView="dayGridMonth"
-              height="490px"
+              height={490}
               editable
               selectable
               dateClick={(info) => openAddModal(info.dateStr)}
@@ -576,7 +565,9 @@ const CalendarSection = () => {
                   if (!hasInline || isWhite || isTransparent) {
                     el.style.background = 'linear-gradient(135deg, #01818E 0%, #22d3ee 100%)';
                     el.style.borderColor = '#01818E';
-                    el.style.color = '#ffffff';
+                    if (!info.event.textColor) {
+                      el.style.color = '#ffffff';
+                    }
                   }
                 } catch (e) {
                   /* no-op */
@@ -597,19 +588,19 @@ const CalendarSection = () => {
               events={filteredEvents}
               eventContent={(arg) => (
                 <div className="px-2 py-1.5">
-                  <div className="text-xs font-bold truncate text-white leading-tight mb-1">
+                  <div className="text-xs font-bold truncate leading-tight mb-1" style={{ color: arg.event.textColor || '#ffffff' }}>
                     {arg.event.title}
                   </div>
                   {arg.event.extendedProps && arg.event.extendedProps.isGhlEvent ? (
                     <div className="flex items-center gap-1.5">
                       <div className="w-2 h-2 bg-white rounded-full opacity-90 flex-shrink-0" />
-                      <span className="text-xs font-semibold text-white opacity-95 leading-tight">
+                      <span className="text-xs font-semibold opacity-95 leading-tight" style={{ color: arg.event.textColor || '#ffffff' }}>
                         {arg.event.extendedProps.calendarName || 'GHL'}
                       </span>
                       {arg.event.extendedProps.contact && (
                         <>
                           <div className="w-1 h-1 bg-white rounded-full opacity-60" />
-                          <span className="text-xs text-white opacity-85 leading-tight">
+                          <span className="text-xs opacity-85 leading-tight" style={{ color: arg.event.textColor || '#ffffff' }}>
                             {String(arg.event.extendedProps.contact).split(' ')[0]}
                           </span>
                         </>
@@ -618,13 +609,13 @@ const CalendarSection = () => {
                   ) : arg.event.extendedProps && arg.event.extendedProps.isTask ? (
                     <div className="flex items-center gap-1.5">
                       <div className="w-2 h-2 bg-white rounded-full opacity-90 flex-shrink-0" />
-                      <span className="text-xs font-semibold text-white opacity-95 leading-tight">
+                      <span className="text-xs font-semibold opacity-95 leading-tight" style={{ color: arg.event.textColor || '#ffffff' }}>
                         {arg.event.extendedProps.priority || 'Task'}
                       </span>
                       {arg.event.extendedProps.assignee && (
                         <>
                           <div className="w-1 h-1 bg-white rounded-full opacity-60" />
-                          <span className="text-xs text-white opacity-85 leading-tight">
+                          <span className="text-xs opacity-85 leading-tight" style={{ color: arg.event.textColor || '#ffffff' }}>
                             {String(arg.event.extendedProps.assignee).split(' ')[0]}
                           </span>
                         </>
@@ -635,7 +626,7 @@ const CalendarSection = () => {
                     arg.event.extendedProps.category && (
                       <div className="flex items-center gap-1.5">
                         <div className="w-2 h-2 bg-white rounded-full opacity-90 flex-shrink-0" />
-                        <span className="text-xs font-semibold text-white opacity-95 leading-tight">
+                        <span className="text-xs font-semibold opacity-95 leading-tight" style={{ color: arg.event.textColor || '#ffffff' }}>
                           {arg.event.extendedProps.category}
                         </span>
                       </div>
@@ -743,8 +734,7 @@ const CalendarSection = () => {
                         <button
                           onClick={() => {
                             setSelectedDate(
-                              moreEventsPopover.date &&
-                                moreEventsPopover.date.toISOString().split('T')[0],
+                              moreEventsPopover.date && toLocalYYYYMMDD(moreEventsPopover.date),
                             );
                             setAppointmentModalOpen(true);
                             closeMoreEventsPopover();
@@ -763,7 +753,18 @@ const CalendarSection = () => {
 
       <Toaster position="top-right" />
 
-      <AppointmentModal isOpen={appointmentModalOpen} onClose={() => setAppointmentModalOpen(false)} selectedDate={selectedDate} mode="create" />
+      <AppointmentModal
+        isOpen={appointmentModalOpen}
+        onClose={() => {
+          setAppointmentModalOpen(false);
+          setEditId(null);
+        }}
+        selectedDate={selectedDate}
+        mode={editId ? 'edit' : 'create'}
+        initialValues={editId ? form : undefined}
+        onSave={saveEvent}
+        onDelete={editId ? deleteEvent : undefined}
+      />
 
       <CalendarList
         isOpen={calendarListOpen}
