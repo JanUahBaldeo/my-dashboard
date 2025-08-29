@@ -5,11 +5,12 @@
 
 import { useState, useCallback } from 'react';
 import ghlIntegration from '@api/ghlIntegrationService';
-import { toast } from 'react-hot-toast';
+import { useNotification } from './useNotification';
 
 export const useGHLIntegration = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const notification = useNotification();
 
   // ========================================================================
   // 🔧 UTILITY FUNCTIONS
@@ -23,8 +24,9 @@ export const useGHLIntegration = () => {
       const result = await operation();
 
       if (result.success) {
+        // Show success notification if message provided
         if (successMessage) {
-          toast.success(successMessage);
+          notification.success(successMessage);
         }
         return result.data;
       } else {
@@ -33,12 +35,13 @@ export const useGHLIntegration = () => {
     } catch (err) {
       const errorMsg = err.message || 'An unexpected error occurred';
       setError(errorMsg);
-      toast.error(errorMsg);
+      // Show error notification
+      notification.error(errorMsg);
       throw err;
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [notification]);
 
   // ========================================================================
   // 📞 CONTACT OPERATIONS

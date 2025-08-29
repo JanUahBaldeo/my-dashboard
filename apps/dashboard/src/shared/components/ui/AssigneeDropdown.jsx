@@ -2,10 +2,9 @@
 // 👤 ASSIGNEE DROPDOWN COMPONENT
 // ========================================
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { createLogger } from '@utils/logger';
-import { fetchUsers, testGHLUsersConnection, getGHLUserId, testDirectCurlFormat } from '@api/userApi';
-import { toast } from 'react-hot-toast';
+import { fetchUsers, getGHLUserId } from '@api/userApi';
 
 const assigneeLogger = createLogger('AssigneeDropdown');
 
@@ -16,11 +15,10 @@ const AssigneeDropdown = ({ value, onChange, placeholder = 'Select assignee' }) 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedUser, setSelectedUser] = useState(null);
   const [isMockData, setIsMockData] = useState(false);
-  const [hasTriedFallback, setHasTriedFallback] = useState(false);
   const dropdownRef = useRef(null);
 
   // Fetch users from GHL using the new API service
-  const fetchUsersFromAPI = async () => {
+  const fetchUsersFromAPI = useCallback(async () => {
     setIsLoading(true);
     assigneeLogger.info('🔄 Fetching users from GHL API...');
     try {
@@ -38,17 +36,12 @@ const AssigneeDropdown = ({ value, onChange, placeholder = 'Select assignee' }) 
 
         if (result.isMockData) {
           assigneeLogger.warn('Using mock users - GHL API not available');
-          // Only show warning if we're actually using mock data
-          toast.warning('⚠️ Using demo users - GHL connection not available');
+          // Global notification will handle this
         } else {
           assigneeLogger.info('Users fetched successfully from GHL', {
             count: result.data.length,
             url: result.url,
           });
-          // Show success message for real GHL users
-          if (result.data.length > 0) {
-            toast.success(`✅ Loaded ${result.data.length} users from GHL`);
-          }
         }
       } else {
         assigneeLogger.error('❌ API call failed:', {
@@ -56,71 +49,21 @@ const AssigneeDropdown = ({ value, onChange, placeholder = 'Select assignee' }) 
           userCount: result.data?.length || 0,
           isMockData: result.isMockData,
         });
-        // Only show error if we don't have any users to display
-        if (result.data.length === 0) {
-          toast.error('❌ Failed to load users');
-        }
+        // Global notification will handle errors
       }
     } catch (error) {
       assigneeLogger.error('Error fetching users:', error);
-      // Only show error if we don't have any users to display
-      if (users.length === 0) {
-        toast.error('❌ Error loading users');
-      }
-    } finally {
-      setIsLoading(false);
-
-      // If we still don't have users after the API call, try the test curl command as fallback
-      if (users.length === 0 && !hasTriedFallback) {
-        console.log('🔄 No users loaded, trying test curl command as fallback...');
-        setHasTriedFallback(true);
-        testCurlCommand(true); // Pass true to indicate this is a fallback call
-      }
-    }
-  };
-
-  // Test the exact curl command
-  const testCurlCommand = async (isFallback = false) => {
-    setIsLoading(true);
-    try {
-      const result = await testDirectCurlFormat();
-
-      if (result.success) {
-        assigneeLogger.success('Curl command test successful', {
-          count: result.data.length,
-          message: result.message,
-        });
-
-        // Only show success toast if not used as fallback
-        if (!isFallback) {
-          toast.success('✅ Curl command test successful!');
-        }
-
-        // Update users with the test results
-        setUsers(result.data);
-        setIsMockData(false);
-      } else {
-        assigneeLogger.error('Curl command test failed:', result.error);
-        if (!isFallback) {
-          toast.error(`❌ Curl test failed: ${result.message}`);
-        }
-      }
-    } catch (error) {
-      assigneeLogger.error('Error testing curl command:', error);
-      if (!isFallback) {
-        toast.error('❌ Error testing curl command');
-      }
+      // Global notification will handle errors
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
   // Load users when component mounts
   useEffect(() => {
     // Always fetch users when component mounts to ensure we get real GHL users
-    console.log('🔄 AssigneeDropdown: Loading users on mount...');
     fetchUsersFromAPI();
-  }, []);
+  }, [fetchUsersFromAPI]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -139,9 +82,6 @@ const AssigneeDropdown = ({ value, onChange, placeholder = 'Select assignee' }) 
     if (value && users.length > 0) {
       const user = users.find(u => u.ghlId === value || u.id === value || u._id === value);
       setSelectedUser(user || null);
-      if (user) {
-        console.log('🎯 Found selected user:', { value, user });
-      }
     } else {
       setSelectedUser(null);
     }
@@ -195,7 +135,6 @@ const AssigneeDropdown = ({ value, onChange, placeholder = 'Select assignee' }) 
     setSelectedUser(user);
     // Use the standardized GHL ID
     const ghlId = getGHLUserId(user);
-    console.log('🎯 Selected user:', { user, ghlId });
     onChange(ghlId);
     setIsOpen(false);
     setSearchQuery('');
@@ -300,13 +239,6 @@ const AssigneeDropdown = ({ value, onChange, placeholder = 'Select assignee' }) 
               className="w-full px-3 py-2 text-sm text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-md transition-colors"
             >
               {isMockData ? 'Try Connect to GHL' : 'Refresh Users'}
-            </button>
-            <button
-              type="button"
-              onClick={testCurlCommand}
-              className="w-full px-3 py-2 text-sm text-green-600 hover:text-green-700 hover:bg-green-50 rounded-md transition-colors mt-1"
-            >
-              Test Curl Command
             </button>
           </div>
         </div>

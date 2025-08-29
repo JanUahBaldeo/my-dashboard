@@ -17,25 +17,23 @@ import {
 
 // Components
 import { ErrorBoundary } from '@shared/components';
-import TimezoneDebugComponent from './src/components/debug/TimezoneDebugComponent';
-import TimezoneApiDebugComponent from './src/components/debug/TimezoneApiDebugComponent';
+
+// Context Providers
+import { NotificationProvider } from './src/context/NotificationContext';
 
 // Hooks
-import { useAppInitialization } from '@hooks/useAppInitialization';
+import { useAppInitialization } from '@hooks';
 
 const App = () => {
   // Initialize timezone and app settings
-  const { isInitialized, isLoading, error, timezone } = useAppInitialization();
+  const { isInitialized, timezone } = useAppInitialization();
 
   return (
     <ErrorBoundary>
+      <NotificationProvider position="top-right">
         <Tooltip.Provider>
           <div data-timezone={timezone} data-app-initialized={isInitialized}>
             <Routes>
-              {/* Debug Routes */}
-              <Route path="/debug/timezone" element={<TimezoneDebugComponent />} />
-              <Route path="/debug/timezone-api" element={<TimezoneApiDebugComponent />} />
-
               {/* Main Routes */}
               <Route path="/" element={<DashboardPage />} />
               <Route path="/calendar" element={<CalendarPage />} />
@@ -49,6 +47,7 @@ const App = () => {
             </Routes>
           </div>
         </Tooltip.Provider>
+      </NotificationProvider>
     </ErrorBoundary>
   );
 };

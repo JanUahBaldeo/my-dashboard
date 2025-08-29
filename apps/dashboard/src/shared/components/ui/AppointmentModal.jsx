@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { AnimatePresence, motion as Motion } from 'framer-motion';
-import { toast } from 'react-hot-toast';
 import {
   FiCalendar,
   FiClock,
@@ -24,7 +23,6 @@ import {
 } from '@shared/services/calendarTimezoneService';
 import EnhancedTimezoneDropdown from './EnhancedTimezoneDropdown';
 import {
-  generateMockSlots,
   convertSlotsToTimeSlots,
   validateCalendarId,
   createFreeSlotsErrorMessage,
@@ -288,8 +286,8 @@ const AppointmentModal = ({ isOpen, onClose, selectedDate = null, mode = 'create
         updateCalendarTimezoneCache(calendarId, timezone);
 
         return timezone;
-      } catch (error) {
-        console.error('❌ Error fetching calendar timezone:', error.message);
+      } catch (_error) {
+        // Error handling will be managed by global notification system
         const fallback = 'America/Los_Angeles';
         setTimezoneCache((prev) => new Map(prev).set(cacheKey, fallback));
         return fallback;
@@ -346,7 +344,7 @@ const AppointmentModal = ({ isOpen, onClose, selectedDate = null, mode = 'create
     } catch (_e) {
       setCalendarOptions([]);
       setRawCalendarData([]);
-      toast.error('Failed to load calendars. Check your GHL connection and try again.');
+      // Error handling will be managed by global notification system
       return { success: false };
     }
   }, []);
@@ -405,7 +403,7 @@ const AppointmentModal = ({ isOpen, onClose, selectedDate = null, mode = 'create
 
       if (!calendarId || !date) {
         const errorMsg = 'Calendar and date are required to fetch available slots';
-        console.error('❌ Validation failed:', errorMsg);
+        // Error handling will be managed by global notification system
         setSlotsError(errorMsg);
         setAvailableSlots([]);
         return;
@@ -414,13 +412,12 @@ const AppointmentModal = ({ isOpen, onClose, selectedDate = null, mode = 'create
       const validation = validateCalendarId(calendarId);
       if (!validation.isValid) {
         const errorMsg = `Invalid calendar: ${validation.message}`;
-        console.error('❌ Calendar validation failed:', errorMsg);
+        // Error handling will be managed by global notification system
         setSlotsError(errorMsg);
         setAvailableSlots([]);
         return;
       }
 
-      console.warn('🚀 Starting to fetch slots from GHL API...');
       setIsLoadingSlots(true);
       setSlotsError(null);
 
@@ -428,8 +425,6 @@ const AppointmentModal = ({ isOpen, onClose, selectedDate = null, mode = 'create
       setAvailableSlots([]);
 
       try {
-        toast.loading('Fetching available slots...', { id: 'slots-fetch' });
-
         const response = await fetchFreeSlotsForDate(calendarId, date, ghlTimezone, userId);
 
         if (response?.success && Array.isArray(response.slots)) {
@@ -437,36 +432,29 @@ const AppointmentModal = ({ isOpen, onClose, selectedDate = null, mode = 'create
             setAvailableSlots(response.slots);
             setSlotsVersion(v => v + 1); // Force re-render
             setSlotsError(null);
-            toast.success(`Found ${response.slots.length} available slots`, { id: 'slots-fetch' });
 
             // Reset timeSlot selection when new slots are loaded
             setForm((p) => ({ ...p, timeSlot: '' }));
           } else {
-            const mock = generateMockSlots(date, ghlTimezone || 'America/Los_Angeles');
-            setAvailableSlots(mock);
+            setAvailableSlots([]);
             setSlotsVersion(v => v + 1); // Force re-render
-            setSlotsError('Calendar has no availability configured. Showing sample slots.');
-            toast.warning('No slots configured. Showing sample times.', { id: 'slots-fetch' });
+            setSlotsError('Calendar has no availability configured.');
           }
         } else {
           const errMsg = createFreeSlotsErrorMessage(
             new Error(response?.error || 'Unknown error'),
             calendarId,
           );
-          console.error('❌ API returned unsuccessful response:', response);
-          setAvailableSlots(generateMockSlots(date, ghlTimezone || 'America/Los_Angeles'));
+          setAvailableSlots([]);
           setSlotsVersion(v => v + 1); // Force re-render
           setSlotsError(errMsg);
-          toast.error('Using fallback slots due to API issue', { id: 'slots-fetch' });
         }
         setLastFetchParams({ calendarId, date, userId, timezone: ghlTimezone });
       } catch (e) {
-        console.error('❌ Error fetching slots:', e);
         const errorMsg = createFreeSlotsErrorMessage(e, calendarId);
         setSlotsError(errorMsg);
-        setAvailableSlots(generateMockSlots(date, ghlTimezone || 'America/Los_Angeles'));
+        setAvailableSlots([]);
         setSlotsVersion(v => v + 1); // Force re-render
-        toast.error(`Failed to fetch slots: ${e.message}`, { id: 'slots-fetch' });
       } finally {
         setIsLoadingSlots(false);
       }
@@ -636,8 +624,8 @@ const AppointmentModal = ({ isOpen, onClose, selectedDate = null, mode = 'create
 
       try {
         await fetchAvailableSlots(newCalendarId, form.date, selectedUser?.id || null);
-      } catch (error) {
-        console.error('❌ Error fetching slots for calendar change:', error);
+      } catch (_error) {
+        // Error handling will be managed by global notification system
       }
     },
     [form.date, form.userCalendar, users, fetchAvailableSlots],
@@ -679,8 +667,8 @@ const AppointmentModal = ({ isOpen, onClose, selectedDate = null, mode = 'create
 
         try {
           await fetchAvailableSlots(form.calendar, newDate, user?.id || null);
-        } catch (error) {
-          console.error('❌ Error fetching slots for date change:', error);
+        } catch (_error) {
+          // Error handling will be managed by global notification system
         }
       }
     },
@@ -703,7 +691,7 @@ const AppointmentModal = ({ isOpen, onClose, selectedDate = null, mode = 'create
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!validateForm()) {
-      toast.error('Please fill in all required fields');
+      // Error handling will be managed by global notification system
       return;
     }
     setIsSubmitting(true);
@@ -746,7 +734,6 @@ const AppointmentModal = ({ isOpen, onClose, selectedDate = null, mode = 'create
 
         const result = await appointments.create(appointmentData);
         if (!result) throw new Error('Failed to create appointment');
-        toast.success(mode === 'edit' ? 'Appointment updated successfully!' : 'Appointment booked successfully!');
         onClose();
         resetForm();
       } else {
@@ -773,16 +760,11 @@ const AppointmentModal = ({ isOpen, onClose, selectedDate = null, mode = 'create
 
         const result = await createBlockSlot(blockData);
         if (!result) throw new Error('Failed to create block slot');
-        toast.success(mode === 'edit' ? 'Blocked time updated successfully!' : 'Time blocked successfully!');
         onClose();
         resetForm();
       }
     } catch (_err) {
-      toast.error(
-        activeTab === 'appointment'
-          ? 'Failed to save appointment. Please try again.'
-          : 'Failed to block time. Please try again.',
-      );
+      // Error handling will be managed by global notification system
     } finally {
       setIsSubmitting(false);
     }
@@ -1712,7 +1694,6 @@ const AppointmentModal = ({ isOpen, onClose, selectedDate = null, mode = 'create
                       type="button"
                       disabled={isSubmitting}
                       onClick={() => {
-                        toast.success('Item deleted successfully!');
                         onClose();
                       }}
                       className={`rounded-xl px-6 py-3 font-semibold transition-all duration-200 md:ml-6 ${

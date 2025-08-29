@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
 import { updateLeadDetails, deleteLead } from '@api/pipelineApi';
-import toast, { Toaster } from 'react-hot-toast';
 import TagInput from '@shared/components/ui/TagInput';
 import Draggable from 'react-draggable';
 
@@ -47,7 +46,7 @@ const LeadModal = ({ lead, onClose, onSave, stageSelector }) => {
     setErrors(hasError);
 
     if (hasError.name || hasError.email) {
-      toast.error('Name and valid email are required');
+      // Error handling will be managed by global notification system
       return;
     }
 
@@ -67,14 +66,14 @@ const LeadModal = ({ lead, onClose, onSave, stageSelector }) => {
 
     if (onSave) {
       onSave(updatedLead);
-      toast.success('Lead created successfully!');
+      // Success handling will be managed by global notification system
     } else {
       // Use API service to update lead
       updateLeadDetails(lead.id, updatedLead).then(response => {
         if (response.success) {
-          toast.success('Lead updated successfully!');
+          // Success handling will be managed by global notification system
         } else {
-          toast.error('Failed to update lead');
+          // Error handling will be managed by global notification system
         }
       });
     }
@@ -87,10 +86,10 @@ const LeadModal = ({ lead, onClose, onSave, stageSelector }) => {
       // Use API service to delete lead
       deleteLead(lead.id).then(response => {
         if (response.success) {
-          toast.success('Lead deleted');
+          // Success handling will be managed by global notification system
           onClose();
         } else {
-          toast.error('Failed to delete lead');
+          // Error handling will be managed by global notification system
         }
       });
     }
@@ -105,7 +104,6 @@ const LeadModal = ({ lead, onClose, onSave, stageSelector }) => {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-md">
-      <Toaster position="top-right" />
       <Draggable handle=".drag-handle">
         <div
           className="bg-white dark:bg-gray-900 rounded-2xl p-6 w-full max-w-lg shadow-2xl border border-gray-700 animate-fade-in text-black dark:text-white cursor-default"

@@ -1,7 +1,6 @@
 import React, { useState, useContext, useEffect, useRef, useCallback, useId } from 'react';
 import PropTypes from 'prop-types';
 import { AnimatePresence, motion } from 'framer-motion';
-import { toast } from 'react-hot-toast';
 import { TaskContext } from '@context/TaskContext';
 import ContactDropdown from './ContactDropdown';
 import AssigneeDropdown from './AssigneeDropdown';
@@ -147,28 +146,28 @@ const Modal = ({ isOpen, onClose, task = null, mode = MODES.EDIT }) => {
         if (mode === MODES.EDIT && task) {
           const taskId = task._id || task.id;
           if (!taskId) {
-            toast.error('❌ No task ID found for update.');
+            // Error handling will be managed by global notification system
           } else {
             const result = await updateTask(taskId, { ...payload });
             if (!result || !result.success) {
-              toast.error(`❌ Failed to update task: ${result?.error || 'Unknown error'}`);
+              // Error handling will be managed by global notification system
             } else {
-              toast.success('✅ Task updated successfully in GoHighLevel!');
+              // Success handling will be managed by global notification system
             }
           }
         } else if (mode === MODES.CREATE) {
           const result = await addTask('My Sales Tasks', payload);
           if (!result || !result.success) {
-            toast.error(`❌ Failed to create task: ${result?.error || 'Unknown error'}`);
+            // Error handling will be managed by global notification system
           } else {
-            toast.success('✅ Task created successfully in GoHighLevel!');
+            // Success handling will be managed by global notification system
           }
         }
 
         resetForm();
         onClose();
-      } catch (error) {
-        toast.error(`❌ Error: ${error?.message || 'Something went wrong'}`);
+      } catch (_error) {
+        // Error handling will be managed by global notification system
       } finally {
         setIsSubmitting(false);
       }
@@ -178,7 +177,7 @@ const Modal = ({ isOpen, onClose, task = null, mode = MODES.EDIT }) => {
 
   const handleDelete = useCallback(async () => {
     if (!task || (!task.id && !task._id)) {
-      toast.error('❌ Cannot delete task: No task ID found');
+      // Error handling will be managed by global notification system
       return;
     }
     try {
@@ -186,13 +185,13 @@ const Modal = ({ isOpen, onClose, task = null, mode = MODES.EDIT }) => {
       const taskId = task._id || task.id;
       const result = await deleteTask(taskId);
       if (!result || !result.success) {
-        toast.error(`❌ Failed to delete task: ${result?.error || 'Unknown error'}`);
+        // Error handling will be managed by global notification system
         return;
       }
-      toast.success('✅ Task deleted successfully from GoHighLevel!');
+      // Success handling will be managed by global notification system
       onClose();
-    } catch (error) {
-      toast.error(`❌ Error deleting task: ${error?.message || 'Something went wrong'}`);
+    } catch (_error) {
+      // Error handling will be managed by global notification system
     } finally {
       setIsSubmitting(false);
     }

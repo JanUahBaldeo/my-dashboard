@@ -8,7 +8,6 @@ import { SearchBox } from '@shared/components';
 import { ProfileInfo } from '@features';
 import RoleSwitcher from './RoleSwitcher';
 import { useRole } from '@context/RoleContext';
-import { useNotifications } from '@hooks/useNotifications';
 
 // shadcn/ui
 import Button from '@/components/ui/button';
@@ -27,7 +26,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 export default function Header() {
   const { currentRole: _currentRole } = useRole();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications();
+  // Global notification system will replace this
 
   // Prefer react-router to derive path for Breadcrumb
   const location = useLocation();
@@ -84,41 +83,21 @@ export default function Header() {
                 aria-label="Notifications"
               >
                 <FiBell className="h-5 w-5" />
-                {unreadCount > 0 && (
-                  <Badge className="absolute -right-1 -top-1 h-5 min-w-[1.25rem] justify-center rounded-full px-1 text-[10px]">
-                    {unreadCount > 9 ? '9+' : unreadCount}
-                  </Badge>
-                )}
+                {/* Global notification system will handle badge */}
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent className="w-80 p-0" align="end">
               <div className="flex items-center justify-between px-3 py-2">
                 <DropdownMenuLabel className="p-0 text-sm font-semibold">Notifications</DropdownMenuLabel>
-                <Button variant="ghost" size="sm" onClick={markAllAsRead} className="text-xs">
+                <Button variant="ghost" size="sm" className="text-xs">
                   Mark all read
                 </Button>
               </div>
               <DropdownMenuSeparator />
               <ScrollArea className="max-h-[22rem]">
-                {notifications.length === 0 ? (
-                  <div className="px-3 py-8 text-center text-sm text-muted-foreground">You're all caught up.</div>
-                ) : (
-                  <div className="divide-y">
-                    {notifications.map((n) => (
-                      <DropdownMenuItem
-                        key={n.id}
-                        onClick={() => markAsRead(n.id)}
-                        className={`flex items-start gap-2 py-3 pl-3 pr-2 ${n.unread ? 'bg-blue-50/40' : ''}`}
-                      >
-                        <div className={`mt-1 h-2 w-2 rounded-full ${n.unread ? 'bg-blue-500' : 'bg-transparent'}`} />
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-medium text-foreground/90">{n.message}</p>
-                          <p className="text-xs text-muted-foreground">{n.time}</p>
-                        </div>
-                      </DropdownMenuItem>
-                    ))}
-                  </div>
-                )}
+                <div className="px-3 py-8 text-center text-sm text-muted-foreground">
+                  Global notification system will be implemented here
+                </div>
               </ScrollArea>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -169,31 +148,15 @@ export default function Header() {
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-sm/6 text-white/90">Notifications</span>
-                  <Button variant="ghost" size="sm" onClick={markAllAsRead} className="text-xs text-white/90">
+                  <Button variant="ghost" size="sm" className="text-xs text-white/90">
                     Mark all read
                   </Button>
                 </div>
                 <div className="rounded-lg bg-white/5">
                   <ScrollArea className="max-h-60">
-                    {notifications.length === 0 ? (
-                      <div className="px-3 py-6 text-center text-sm text-white/80">You're all caught up.</div>
-                    ) : (
-                      <ul className="divide-y divide-white/10">
-                        {notifications.map((n) => (
-                          <li
-                            key={n.id}
-                            className="flex cursor-pointer items-start gap-2 px-3 py-3"
-                            onClick={() => markAsRead(n.id)}
-                          >
-                            <div className={`mt-1 h-2 w-2 rounded-full ${n.unread ? 'bg-blue-300' : 'bg-transparent'}`} />
-                            <div className="min-w-0">
-                              <p className="truncate text-sm font-medium text-white">{n.message}</p>
-                              <p className="text-xs text-white/80">{n.time}</p>
-                            </div>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
+                    <div className="px-3 py-6 text-center text-sm text-white/80">
+                      Global notification system will be implemented here
+                    </div>
                   </ScrollArea>
                 </div>
                 <div className="pt-1">

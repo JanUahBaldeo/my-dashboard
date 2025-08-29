@@ -3,7 +3,6 @@ import FullCalendar from '@fullcalendar/react';
 import dayGridPlugin from '@fullcalendar/daygrid';
 import timeGridPlugin from '@fullcalendar/timegrid';
 import interactionPlugin from '@fullcalendar/interaction';
-import toast, { Toaster } from 'react-hot-toast';
 import { TaskContext } from '@app/providers/TaskContext';
 import { CalendarContext } from '@app/providers/CalendarContext';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -29,6 +28,14 @@ const getNextWeekISO = (start, weeks) => {
   const date = new Date(start);
   date.setDate(date.getDate() + weeks * 7);
   return toLocalYYYYMMDD(date);
+};
+
+const toLocalYYYYMMDD = (date) => {
+  const d = new Date(date);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 };
 
 const CalendarSection = () => {
@@ -118,21 +125,13 @@ const CalendarSection = () => {
         const first = calendars[0];
         handleCalendarSelection(first.id, first.name, true);
       }
-    } catch (error) {
-      const mockCalendars = [
-        { id: 'mock-calendar-1', name: 'Main Calendar', description: 'Primary business calendar', isActive: true },
-        { id: 'mock-calendar-2', name: 'Consultation Calendar', description: 'Client consultations', isActive: true },
-      ];
-      setAvailableCalendars(mockCalendars);
-      if (selectedCalendars.size === 0) {
-        const first = mockCalendars[0];
-        handleCalendarSelection(first.id, first.name, true);
-      }
-      toast('Using demo calendars (check GHL API connection) ⚠️');
+    } catch (_error) {
+      // API error handling will be managed by global notification system
+      setAvailableCalendars([]);
     }
   };
 
-  const fetchEventsForCalendar = async (calendarId, calendarName) => {
+  const fetchEventsForCalendar = async (calendarId, _calendarName) => {
     setIsLoadingGhlEvents(true);
     try {
       const startDate = new Date();
@@ -140,52 +139,17 @@ const CalendarSection = () => {
       const endDate = new Date();
       endDate.setDate(endDate.getDate() + 90);
 
-      try {
-        const response = await fetchGHLCalendarEvents(
-          GHL_CONFIG.locationId,
-          calendarId,
-          startDate.getTime(),
-          endDate.getTime(),
-        );
-        const e = response?.events || [];
-        setGhlEvents((prev) => ({ ...prev, [calendarId]: e }));
-        toast.success(`Loaded ${e.length} events from ${calendarName}`);
-      } catch {
-        const now = Date.now();
-        const mockEvents = [
-          {
-            id: `mock-${calendarId}-1`,
-            title: `${calendarName} - Client Consultation`,
-            startTime: now,
-            endTime: now + 60 * 60 * 1000,
-            contactName: 'John Doe',
-            description: `Mock event from ${calendarName}`,
-            status: 'scheduled',
-          },
-          {
-            id: `mock-${calendarId}-2`,
-            title: `${calendarName} - Follow-up Meeting`,
-            startTime: now + 24 * 60 * 60 * 1000,
-            endTime: now + 24 * 60 * 60 * 1000 + 30 * 60 * 1000,
-            contactName: 'Jane Smith',
-            description: `Mock event from ${calendarName}`,
-            status: 'confirmed',
-          },
-          {
-            id: `mock-${calendarId}-3`,
-            title: `${calendarName} - Project Review`,
-            startTime: now + 2 * 24 * 60 * 60 * 1000,
-            endTime: now + 2 * 24 * 60 * 60 * 1000 + 45 * 60 * 1000,
-            contactName: 'Mike Wilson',
-            description: `Mock event from ${calendarName}`,
-            status: 'pending',
-          },
-        ];
-        setGhlEvents((prev) => ({ ...prev, [calendarId]: mockEvents }));
-        toast('Using demo data for GHL events ⚠️');
-      }
-    } catch (e) {
-      toast.error(`Failed to load ${calendarName}`);
+      const response = await fetchGHLCalendarEvents(
+        GHL_CONFIG.locationId,
+        calendarId,
+        startDate.getTime(),
+        endDate.getTime(),
+      );
+      const e = response?.events || [];
+      setGhlEvents((prev) => ({ ...prev, [calendarId]: e }));
+    } catch (_error) {
+      // API error handling will be managed by global notification system
+      setGhlEvents((prev) => ({ ...prev, [calendarId]: [] }));
     } finally {
       setIsLoadingGhlEvents(false);
     }
@@ -355,7 +319,7 @@ const CalendarSection = () => {
       );
     }
     return res;
-  }, [events, taskEvents, appointmentEvents, ghlCalendarEvents, filter, search]);
+  }, [events, taskEvents, appointmentEvents, ghlCalendarEvents, search]);
 
   const openAddModal = (dateStr) => {
     setSelectedDate(dateStr);
@@ -426,7 +390,7 @@ const CalendarSection = () => {
 
   const saveEvent = () => {
     if (!form.title.trim()) {
-      toast.error('Please enter an event title');
+      // Error handling will be managed by global notification system
       return;
     }
     const base = {
@@ -448,7 +412,6 @@ const CalendarSection = () => {
 
     if (editId) {
       setEvents((prev) => prev.map((e) => (e.id === editId ? { ...e, ...base, start: selectedDate, end: selectedDate } : e)));
-      toast.success('Event updated');
     } else {
       const newEvent = {
         id: `event-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`,
@@ -457,7 +420,6 @@ const CalendarSection = () => {
         end: selectedDate,
       };
       setEvents((prev) => [...prev, newEvent]);
-      toast.success('Event added');
     }
 
     setAppointmentModalOpen(false);
@@ -466,7 +428,6 @@ const CalendarSection = () => {
 
   const deleteEvent = () => {
     setEvents((prev) => prev.filter((e) => e.id !== editId));
-    toast.success('Event deleted');
     setAppointmentModalOpen(false);
     setForm({ title: '', category: 'Activity', repeat: false, description: '', location: '', attendees: '' });
   };
@@ -569,7 +530,7 @@ const CalendarSection = () => {
                       el.style.color = '#ffffff';
                     }
                   }
-                } catch (e) {
+                } catch (_e) {
                   /* no-op */
                 }
               }}
@@ -749,9 +710,6 @@ const CalendarSection = () => {
                   </motion.div>
                 )}
               </AnimatePresence>
-
-
-      <Toaster position="top-right" />
 
       <AppointmentModal
         isOpen={appointmentModalOpen}

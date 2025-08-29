@@ -23,6 +23,8 @@
   "scripts": {
     "dev": "npm run dev --workspace=apps/dashboard",
     "dev:dashboard": "npm run dev --workspace=apps/dashboard",
+    "dev:api": "npm run dev --workspace=services/api-server",
+    "start:api": "npm start --workspace=services/api-server",
     "build": "npm run build --workspaces --if-present",
     "build:dashboard": "npm run build --workspace=apps/dashboard",
     "lint": "npm run lint --workspaces --if-present",

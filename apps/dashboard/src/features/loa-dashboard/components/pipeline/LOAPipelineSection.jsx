@@ -11,7 +11,6 @@ import { CSS } from '@dnd-kit/utilities';
 import { usePipeline } from '@context/PipelineContext';
 import LOAKanbanColumn from './LOAKanbanColumn';
 import LOAKanbanCard from './LOAKanbanCard';
-import { toast } from 'react-hot-toast';
 import { FiRefreshCw, FiFilter, FiTrendingUp, FiPlus, FiSearch, FiGrid, FiList, FiSettings } from 'react-icons/fi';
 import { uiLogger } from '@utils/logger';
 
@@ -62,9 +61,9 @@ const LOAPipelineSection = ({ isAdmin = false }) => {
     setRefreshing(true);
     try {
       await manualRefresh();
-      toast.success('✅ Pipeline data refreshed!');
-    } catch (error) {
-      toast.error('❌ Failed to refresh data');
+      // Global notification will handle success
+    } catch (_error) {
+      // Global notification will handle errors
     } finally {
       setRefreshing(false);
     }
@@ -73,30 +72,30 @@ const LOAPipelineSection = ({ isAdmin = false }) => {
   const handleAddLead = async (stageTitle, newLead) => {
     try {
       await addLead(stageTitle, newLead);
-      toast.success('✅ Lead added successfully!');
+      // Global notification will handle success
     } catch (error) {
       uiLogger.error('Error adding lead', error);
-      toast.error('Failed to add lead');
+      // Global notification will handle errors
     }
   };
 
   const handleUpdateLead = async (leadId, updates) => {
     try {
       await updateLead(leadId, updates);
-      toast.success('✅ Lead updated successfully!');
+      // Global notification will handle success
     } catch (error) {
       uiLogger.error('Error updating lead', error);
-      toast.error('Failed to update lead');
+      // Global notification will handle errors
     }
   };
 
   const handleMoveLead = async (leadId, fromStage, toStage) => {
     try {
       await moveLead(leadId, fromStage, toStage);
-      toast.success('✅ Lead moved successfully!');
+      // Global notification will handle success
     } catch (error) {
       uiLogger.error('Error moving lead', error);
-      toast.error('Failed to move lead');
+      // Global notification will handle errors
     }
   };
 

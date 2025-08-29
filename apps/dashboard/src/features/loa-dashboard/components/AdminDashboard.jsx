@@ -3,7 +3,7 @@
 // ========================================
 
 import React from 'react';
-import { LOAPipelineSection, LOAUnifiedTaskManager, NotificationSection, CommunicationLog, CollaborationHandoff, QuickStats } from './';
+import { LOAPipelineSection, LOAUnifiedTaskManager, CommunicationLog, CollaborationHandoff, QuickStats } from './';
 import { PipelineProvider } from '@context/PipelineContext';
 
 const AdminDashboard = () => {
@@ -25,7 +25,10 @@ const AdminDashboard = () => {
           <Section>
             <div className="flex flex-col lg:flex-row gap-6 w-full">
               <div className="flex-1">
-                <NotificationSection />
+                {/* Global notification system will be implemented here */}
+                <div className="p-4 bg-gray-50 rounded-lg text-center text-gray-500">
+                  Global Notification System Placeholder
+                </div>
               </div>
               <div className="w-full lg:w-1/3">
                 <QuickStats />

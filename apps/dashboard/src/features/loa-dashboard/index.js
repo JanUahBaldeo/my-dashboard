@@ -7,7 +7,6 @@ export { default as AdminDashboard } from './components/AdminDashboard';
 export { default as CollaborationHandoff } from './components/CollaborationHandoff';
 export { default as CommunicationLog } from './components/CommunicationLog';
 export { default as DocumentChecklist } from './components/DocumentChecklist';
-export { default as NotificationSection } from './components/NotificationSection';
 export { default as QuickStats } from './components/QuickStats';
 export { default as StatModal } from './components/StatModal';
 

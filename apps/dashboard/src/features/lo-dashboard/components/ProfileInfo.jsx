@@ -2,31 +2,104 @@
 // 🎯 ENHANCED PROFILE INFO COMPONENT
 // ========================================
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FiUser, FiSettings, FiBell, FiHelpCircle, FiShield } from 'react-icons/fi';
 
 const ProfileInfo = () => {
   const [open, setOpen] = useState(false);
   const menuRef = useRef(null);
+  const [profile, setProfile] = useState(null);
+  const [_loading, _setLoading] = useState(true);
+  const [_error, _setError] = useState(null);
 
-  // User data
-  const user = {
+  // Default fallback user data (memoized to prevent re-renders)
+  const defaultUser = useMemo(() => ({
     name: 'User',
     email: 'user@example.com',
     tier: 'Premium',
     avatar: 'https://i.ibb.co/rK44TsnC/logo.png',
     role: 'Loan Officer',
     status: 'online',
+  }), []);
+
+  // Get userid from URL parameters
+  const getUserIdFromUrl = () => {
+    const urlParams = new URLSearchParams(window.location.search);
+    return urlParams.get('userid');
   };
+
+  // Fetch profile data from API
+  const fetchProfile = useCallback(async (userid) => {
+    if (!userid) {
+      setProfile(defaultUser);
+      _setLoading(false);
+      return;
+    }
+
+    try {
+      _setLoading(true);
+      _setError(null);
+
+      // Call our API server
+      const response = await fetch(`http://localhost:3001/v2/location/b7vHWUGVUNQGoIlAXabY/settings/staff/team?userid=${userid}`);
+
+      if (!response.ok) {
+        throw new Error(`API error: ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      if (data.profile) {
+        // Map API response to our component format
+        setProfile({
+          name: data.profile.name || 'User',
+          email: data.profile.email || 'user@example.com',
+          tier: data.profile.plan || 'Premium',
+          avatar: data.profile.avatar || 'https://i.ibb.co/rK44TsnC/logo.png',
+          role: data.profile.role || 'Loan Officer',
+          status: data.profile.online ? 'online' : 'offline',
+          phone: data.profile.phone,
+          locationId: data.profile.locationId,
+          _raw: data.profile._raw,
+        });
+      } else {
+        setProfile(defaultUser);
+      }
+    } catch (err) {
+      console.error('Failed to fetch profile:', err);
+      _setError(err.message);
+      setProfile(defaultUser); // Fallback to default
+    } finally {
+      _setLoading(false);
+    }
+  }, [defaultUser]);
+
+  // Fetch profile on component mount and URL change
+  useEffect(() => {
+    const userid = getUserIdFromUrl();
+    fetchProfile(userid);
+
+    // Listen for URL changes
+    const handleUrlChange = () => {
+      const newUserid = getUserIdFromUrl();
+      fetchProfile(newUserid);
+    };
+
+    window.addEventListener('popstate', handleUrlChange);
+    return () => window.removeEventListener('popstate', handleUrlChange);
+  }, [fetchProfile]);
+
+  // Use profile data or fallback to default
+  const user = profile || defaultUser;
 
   // Menu items
   const menuItems = [
-    { id: 'profile', label: 'View Profile', icon: FiUser, action: () => console.log('Profile clicked') },
-    { id: 'settings', label: 'Settings', icon: FiSettings, action: () => console.log('Settings clicked') },
-    { id: 'notifications', label: 'Notifications', icon: FiBell, action: () => console.log('Notifications clicked') },
-    { id: 'help', label: 'Help & Support', icon: FiHelpCircle, action: () => console.log('Help clicked') },
-    { id: 'security', label: 'Security', icon: FiShield, action: () => console.log('Security clicked') },
+    { id: 'profile', label: 'View Profile', icon: FiUser, action: () => { /* Profile action */ } },
+    { id: 'settings', label: 'Settings', icon: FiSettings, action: () => { /* Settings action */ } },
+    { id: 'notifications', label: 'Notifications', icon: FiBell, action: () => { /* Notifications action */ } },
+    { id: 'help', label: 'Help & Support', icon: FiHelpCircle, action: () => { /* Help action */ } },
+    { id: 'security', label: 'Security', icon: FiShield, action: () => { /* Security action */ } },
   ];
 
   /* ─── Close dropdown on outside click ───────────── */

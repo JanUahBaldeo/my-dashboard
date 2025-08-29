@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import toast from 'react-hot-toast';
 import { FiCalendar, FiClock, FiUser, FiMapPin, FiPhone, FiMail, FiEdit3, FiTrash2, FiEye, FiFilter, FiSearch, FiChevronDown, FiPlus } from 'react-icons/fi';
 import { fetchAppointments, getAllCalendarEvents, deleteAppointment } from '@shared/services/api/calendarApi';
 
@@ -117,11 +116,10 @@ const AppointmentListView = () => {
       allAppointments.sort((a, b) => new Date(b.startTime || 0) - new Date(a.startTime || 0));
 
       setAppointments(allAppointments);
-      toast.success(`Loaded ${allAppointments.length} appointments from GHL backend`);
+      // Success handling will be managed by global notification system
     } catch (err) {
-      console.error('Error fetching appointments:', err);
       setError(err.message);
-      toast.error('Failed to load appointments: ' + err.message);
+      // Error handling will be managed by global notification system
     } finally {
       setLoading(false);
     }
@@ -235,13 +233,12 @@ const AppointmentListView = () => {
       const result = await deleteAppointment(appointmentId);
       if (result.success) {
         setAppointments(prev => prev.filter(appt => appt.id !== appointmentId));
-        toast.success('Appointment deleted successfully');
+        // Success handling will be managed by global notification system
       } else {
-        toast.error('Failed to delete appointment');
+        // Error handling will be managed by global notification system
       }
-    } catch (error) {
-      console.error('Error deleting appointment:', error);
-      toast.error('Failed to delete appointment');
+    } catch (_error) {
+      // Error handling will be managed by global notification system
     }
   };
 
@@ -322,46 +319,6 @@ const AppointmentListView = () => {
         </div>
 
         <div className="flex items-center gap-3">
-          <button
-            onClick={() => {
-              const mockAppointments = [
-                {
-                  id: 'test-1',
-                  title: 'Test Consultation',
-                  startTime: new Date().toISOString(),
-                  endTime: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
-                  contactName: 'John Doe',
-                  contactEmail: 'john@example.com',
-                  status: 'scheduled',
-                  location: 'Main Office',
-                },
-                {
-                  id: 'test-2',
-                  title: 'Follow-up Meeting',
-                  startTime: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-                  endTime: new Date(Date.now() + 25 * 60 * 60 * 1000).toISOString(),
-                  contactName: 'Jane Smith',
-                  contactEmail: 'jane@example.com',
-                  status: 'confirmed',
-                  location: 'Virtual',
-                },
-              ];
-              setAppointments(mockAppointments);
-              toast.success('Test data loaded!', { position: 'top-right', autoClose: 2000 });
-            }}
-            className="flex items-center gap-2 px-3 py-2 bg-yellow-100 hover:bg-yellow-200 text-yellow-700 rounded-lg transition-colors"
-          >
-            🧪 Test Data
-          </button>
-          <button
-            onClick={() => {
-              setAppointments([]);
-              toast.info('Appointments cleared!', { position: 'top-right', autoClose: 1500 });
-            }}
-            className="flex items-center gap-2 px-3 py-2 bg-red-100 hover:bg-red-200 text-red-700 rounded-lg transition-colors"
-          >
-            🗑️ Clear
-          </button>
           <button className="flex items-center gap-2 px-4 py-2 bg-[#01818E] hover:bg-[#01818E]/90 text-white rounded-lg transition-colors">
             <FiPlus className="w-4 h-4" />
             New Appointment

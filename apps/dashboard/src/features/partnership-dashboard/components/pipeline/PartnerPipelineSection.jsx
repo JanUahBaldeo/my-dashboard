@@ -11,7 +11,6 @@ import { CSS } from '@dnd-kit/utilities';
 import { usePipeline } from '@context/PipelineContext';
 import PartnerKanbanColumn from './PartnerKanbanColumn';
 import PartnerKanbanCard from './PartnerKanbanCard';
-import { toast } from 'react-hot-toast';
 import { FiRefreshCw, FiFilter, FiTrendingUp, FiPlus, FiSearch, FiGrid, FiList, FiSettings } from 'react-icons/fi';
 import { uiLogger } from '@utils/logger';
 
@@ -70,33 +69,42 @@ const PartnerPipelineSection = ({ isAdmin = false }) => {
     }
   };
 
-  const handleAddLead = async (stageTitle, newLead) => {
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
     try {
-      await addLead(stageTitle, newLead);
-      toast.success('✅ Partner lead added successfully!');
-    } catch (error) {
-      uiLogger.error('Error adding partner lead', error);
-      toast.error('Failed to add partner lead');
+      await refreshData();
+      // Global notification will handle success
+    } catch (_error) {
+      // Global notification will handle errors
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
+  const handleAddLead = async (leadData) => {
+    try {
+      await addLead(leadData);
+      // Global notification will handle success
+    } catch (_error) {
+      // Global notification will handle errors
     }
   };
 
   const handleUpdateLead = async (leadId, updates) => {
     try {
       await updateLead(leadId, updates);
-      toast.success('✅ Partner lead updated successfully!');
-    } catch (error) {
-      uiLogger.error('Error updating partner lead', error);
-      toast.error('Failed to update partner lead');
+      // Global notification will handle success
+    } catch (_error) {
+      // Global notification will handle errors
     }
   };
 
-  const handleMoveLead = async (leadId, fromStage, toStage) => {
+  const handleMoveLead = async (leadId, newStage, oldStage) => {
     try {
-      await moveLead(leadId, fromStage, toStage);
-      toast.success('✅ Partner lead moved successfully!');
-    } catch (error) {
-      uiLogger.error('Error moving partner lead', error);
-      toast.error('Failed to move partner lead');
+      await moveLead(leadId, newStage, oldStage);
+      // Global notification will handle success
+    } catch (_error) {
+      // Global notification will handle errors
     }
   };
 

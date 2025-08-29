@@ -5,10 +5,10 @@
 import React, { useMemo, useState, useContext, useEffect, useCallback } from 'react';
 import PropTypes from 'prop-types';
 import { motion, AnimatePresence } from 'framer-motion';
-import { toast } from 'react-hot-toast';
 import { TaskContext } from '@context/TaskContext';
 import Modal from '@shared/components/ui/Modal';
 import { StatCard, SectionHeader, SearchInput } from '@shared/components/ui';
+import { useCrudNotifications } from '../../../utils/crudNotificationsClean';
 import {
   FiClock,
   FiCheckCircle,
@@ -200,14 +200,14 @@ FilterSelect.propTypes = {
 };
 
 const Pagination = React.memo(function Pagination({ current, total, onPrev, onNext, onJump }) {
-  if (total <= 1) return null;
-
   const pages = useMemo(() => {
     const max = 5;
     const start = Math.max(1, Math.min(current - 2, total - (max - 1)));
     const end = Math.min(total, start + (max - 1));
     return Array.from({ length: end - start + 1 }, (_, i) => start + i);
   }, [current, total]);
+
+  if (total <= 1) return null;
 
   return (
     <div className="px-3 py-2 border-t border-gray-100 bg-gray-50 flex items-center justify-between rounded-b-xl text-[13px]">
@@ -355,6 +355,7 @@ const PAGE_SIZE = 10;
 
 const TaskManagementDashboard = () => {
   const { tasksByCategory, completeTask, deleteTask } = useContext(TaskContext);
+  const crudNotifications = useCrudNotifications();
 
   const rawTasks = useMemo(
     () => (tasksByCategory?.['All Tasks']?.items || []).map(normalizeTask),
@@ -445,22 +446,22 @@ const TaskManagementDashboard = () => {
 
   const handleDelete = useCallback(
     async (t) => {
-      if (window.confirm(`Delete ${t.title}?`)) {
-        const res = await deleteTask(t.id);
-        res?.success ? toast.success('Deleted!') : toast.error('Failed');
+      // eslint-disable-next-line no-alert
+      const confirmed = window.confirm(`Delete ${t.title}?`);
+      if (confirmed) {
+        await crudNotifications.tasks.delete(deleteTask, t.id, t.title);
       }
     },
-    [deleteTask],
+    [deleteTask, crudNotifications],
   );
 
   const handleToggle = useCallback(
     async (t) => {
       if (loadingTasks.has(t.id)) return; // Prevent multiple clicks
-      
+
       setLoadingTasks(prev => new Set(prev).add(t.id));
       try {
-        const res = await completeTask(t.id, !t.isCompleted);
-        res?.success ? toast.success('Updated!') : toast.error('Failed');
+        await crudNotifications.tasks.complete(completeTask, t.id, t.title);
       } finally {
         setLoadingTasks(prev => {
           const newSet = new Set(prev);
@@ -469,7 +470,7 @@ const TaskManagementDashboard = () => {
         });
       }
     },
-    [completeTask, loadingTasks],
+    [completeTask, loadingTasks, crudNotifications],
   );
 
   const goPrev = useCallback(() => setCurrentPage((p) => Math.max(1, p - 1)), []);
